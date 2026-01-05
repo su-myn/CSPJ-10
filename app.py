@@ -8,6 +8,7 @@ from datetime import datetime
 import json
 import csv
 import io
+from urllib.parse import urlparse
 
 # Configure application
 app = Flask(__name__)
@@ -47,8 +48,181 @@ def inject_is_admin():
     return dict(is_admin=is_admin_user())
 
 # Database helper functions
+class PostgresRow:
+    """Make PostgreSQL rows work like SQLite rows"""
+    def __init__(self, data):
+        self._data = dict(data)
+    def __getitem__(self, key):
+        return self._data[key]
+    def __contains__(self, key):
+        return key in self._data
+    def get(self, key, default=None):
+        return self._data.get(key, default)
+    def keys(self):
+        return self._data.keys()
+    def __iter__(self):
+        return iter(self._data)
+    def __getattr__(self, name):
+        return self._data.get(name)
+
+class PostgresCursor:
+    """Wrapper to make PostgreSQL cursor work like SQLite cursor"""
+    def __init__(self, cursor, conn):
+        self.cursor = cursor
+        self.conn = conn
+        self._lastrowid = None
+    
+    def fetchone(self):
+        result = self.cursor.fetchone()
+        if result:
+            return PostgresRow(dict(result))
+        return None
+    
+    def fetchall(self):
+        results = self.cursor.fetchall()
+        return [PostgresRow(dict(r)) for r in results]
+    
+    def lastrowid(self):
+        # For PostgreSQL, we need to get the ID from the RETURNING clause
+        # If _lastrowid was set, return it
+        if self._lastrowid is not None:
+            return self._lastrowid
+        # Otherwise try to get from cursor (won't work for PostgreSQL)
+        return getattr(self.cursor, 'lastrowid', None)
+    
+    def set_lastrowid(self, rowid):
+        self._lastrowid = rowid
+
+class PostgresConnection:
+    """Wrapper to make PostgreSQL connection work like SQLite connection"""
+    def __init__(self, conn):
+        self.conn = conn
+        self.row_factory = None
+    
+    def execute(self, query, params=None):
+        from psycopg2.extras import RealDictCursor
+        
+        # Handle PRAGMA table_info (SQLite-specific) - convert to PostgreSQL equivalent
+        if query.strip().upper().startswith('PRAGMA TABLE_INFO'):
+            # Extract table name from PRAGMA table_info(table_name)
+            import re
+            match = re.search(r'PRAGMA\s+table_info\((\w+)\)', query, re.IGNORECASE)
+            if match:
+                table_name = match.group(1)
+                # Convert to PostgreSQL information_schema query
+                # SQLite PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
+                pg_query = """
+                    SELECT 
+                        ordinal_position - 1 as cid,
+                        column_name as name,
+                        data_type as type,
+                        CASE WHEN is_nullable = 'NO' THEN 1 ELSE 0 END as notnull,
+                        column_default as dflt_value,
+                        0 as pk
+                    FROM information_schema.columns
+                    WHERE table_name = %s
+                    ORDER BY ordinal_position
+                """
+                cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+                cursor.execute(pg_query, (table_name,))
+                return PostgresCursor(cursor, self.conn)
+        
+        # Skip other PRAGMA statements (SQLite-specific, not supported in PostgreSQL)
+        if query.strip().upper().startswith('PRAGMA'):
+            # Return a dummy cursor that does nothing
+            class DummyCursor:
+                def fetchone(self):
+                    return None
+                def fetchall(self):
+                    return []
+                def lastrowid(self):
+                    return None
+            return PostgresCursor(DummyCursor(), self.conn)
+        
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Convert SQLite DDL to PostgreSQL DDL for CREATE TABLE statements
+        if query.strip().upper().startswith('CREATE TABLE'):
+            # Convert SQLite-specific syntax to PostgreSQL
+            query = query.replace('INTEGER PRIMARY KEY AUTOINCREMENT', 'SERIAL PRIMARY KEY')
+            query = query.replace('AUTOINCREMENT', '')
+        
+        # Convert SQLite placeholders (?) to PostgreSQL placeholders (%s)
+        # For INSERT queries, add RETURNING id to get the last inserted ID
+        original_query = query
+        is_insert = query.strip().upper().startswith('INSERT')
+        needs_returning = is_insert and 'RETURNING' not in query.upper()
+        
+        if params:
+            # Replace ? with %s in query (simple replacement, works for most cases)
+            query = query.replace('?', '%s')
+            if needs_returning:
+                # Add RETURNING id to get the inserted ID
+                query = query.rstrip(';') + ' RETURNING id'
+            cursor.execute(query, params)
+        else:
+            if needs_returning:
+                query = query.rstrip(';') + ' RETURNING id'
+            cursor.execute(query)
+        
+        pg_cursor = PostgresCursor(cursor, self.conn)
+        
+        # If it's an INSERT with RETURNING, fetch the ID
+        if needs_returning:
+            result = cursor.fetchone()
+            if result:
+                pg_cursor.set_lastrowid(result['id'])
+        
+        return pg_cursor
+    
+    def commit(self):
+        self.conn.commit()
+    
+    def close(self):
+        self.conn.close()
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self.conn.rollback()
+        else:
+            self.conn.commit()
+        self.conn.close()
+
 def get_db():
-    """Get database connection"""
+    """Get database connection - supports both SQLite (local) and PostgreSQL (Railway)"""
+    database_url = os.environ.get('DATABASE_URL')
+    
+    if database_url:
+        # Use PostgreSQL on Railway
+        try:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+            
+            # Parse DATABASE_URL (Railway format: postgresql://user:pass@host:port/dbname)
+            # Convert to psycopg2 format if needed
+            if database_url.startswith('postgres://'):
+                database_url = database_url.replace('postgres://', 'postgresql://', 1)
+            
+            conn = psycopg2.connect(database_url, sslmode='require')
+            # Wrap in PostgresConnection to make it work like SQLite
+            db = PostgresConnection(conn)
+            # Create a custom row factory that returns PostgresRow objects
+            def row_factory(cursor, row):
+                return PostgresRow(dict(row))
+            db.row_factory = row_factory
+            return db
+        except ImportError:
+            # Fallback to SQLite if psycopg2 not available
+            pass
+        except Exception as e:
+            print(f"Error connecting to PostgreSQL: {e}")
+            # Fallback to SQLite
+            pass
+    
+    # Use SQLite for local development
     db = sqlite3.connect('database.db', timeout=10.0)
     db.row_factory = sqlite3.Row
     # Enable WAL mode for better concurrency (allows multiple readers)
