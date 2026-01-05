@@ -514,40 +514,6 @@ def register():
     
     return render_template("register.html")
 
-@app.route("/set-admin")
-def set_admin():
-    """Set first user as admin - no authentication required (temporary route for initial setup)"""
-    db = get_db()
-    
-    # Make first user admin if no admins exist
-    admin_count = db.execute("SELECT COUNT(*) FROM users WHERE is_admin = 1").fetchone()[0]
-    if admin_count == 0:
-        first_user = db.execute("SELECT id, username FROM users ORDER BY id LIMIT 1").fetchone()
-        if first_user:
-            db.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (first_user["id"],))
-            db.commit()
-            db.close()
-            return f"""<html><body style="font-family: Arial, sans-serif; padding: 20px; text-align: center;">
-                <h2>✅ Admin Access Granted</h2>
-                <p>Admin privileges have been granted to the first user: <strong>{first_user['username']}</strong> (ID: {first_user['id']})</p>
-                <p><a href="/login" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">Go to Login</a></p>
-                <p style="color: #666; font-size: 12px; margin-top: 30px;">⚠️ Remember to remove or protect this route after use!</p>
-            </body></html>"""
-        else:
-            db.close()
-            return """<html><body style="font-family: Arial, sans-serif; padding: 20px; text-align: center;">
-                <h2>❌ No Users Found</h2>
-                <p>No users found in database. Please register a user first.</p>
-                <p><a href="/register" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">Go to Register</a></p>
-            </body></html>"""
-    else:
-        db.close()
-        return f"""<html><body style="font-family: Arial, sans-serif; padding: 20px; text-align: center;">
-            <h2>✅ Admin System Active</h2>
-            <p>Admin system is working. Current admins: <strong>{admin_count}</strong></p>
-            <p><a href="/admin" style="display: inline-block; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px;">Go to Admin Panel</a></p>
-        </body></html>"""
-
 @app.route("/fix-admin")
 def fix_admin():
     """Fix admin status for first user - diagnostic route (admin only)"""
