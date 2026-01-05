@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Fields - {{ category.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .field-item {
+        background: #f8f9fa;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        border-left: 4px solid #007bff;
+    }
+    .field-item.sortable-ghost {
+        opacity: 0.4;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Manage Fields: {{ category.name }}</h1>
+    <a href="/category/{{ category.id }}" class="btn btn-secondary">Back to Category</a>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Add New Field</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="addFieldForm">
+                    <input type="hidden" name="action" value="add">
+                    <div class="mb-3">
+                        <label for="label" class="form-label">Field Label</label>
+                        <input type="text" class="form-control" id="label" name="label" required>
+                        <small class="form-text text-muted">e.g., Age, Net Worth, Industry</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="field_type" class="form-label">Field Type</label>
+                        <select class="form-select" id="field_type" name="field_type" required onchange="toggleOptions()">
+                            <option value="text">Text</option>
+                            <option value="textarea">Multiline Text</option>
+                            <option value="email">Email</option>
+                            <option value="integer">Integer</option>
+                            <option value="number">Number (Decimal)</option>
+                            <option value="datetime">Date/Time</option>
+                            <option value="select">Select (Dropdown)</option>
+                            <option value="radio">Radio Button</option>
+                            <option value="checkbox_list">Checkbox</option>
+                            <option value="image">Image</option>
+                            <option value="image_album">Image Album (Multiple Images)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="optionsDiv" style="display: none;">
+                        <label for="options" class="form-label">Options (one per line)</label>
+                        <textarea class="form-control" id="options" name="options" rows="4" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
+                        <small class="form-text text-muted">Required for Select, Radio, and Checkbox fields</small>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="required" name="required">
+                            <label class="form-check-label" for="required">Required Field</label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Field</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Existing Fields</h5>
+                <small class="text-muted">Drag to reorder</small>
+            </div>
+            <div class="card-body" id="fieldsList">
+                {% if fields %}
+                <script>
+                // Store field data globally
+                window.fieldData = {};
+                {% for field in fields %}
+                window.fieldData["{{ field.id }}"] = {
+                    id: {{ field.id }},
+                    label: {{ field.label|tojson }},
+                    field_type: {{ field.field_type|tojson }},
+                    options: {% if field.options %}{{ field.options|tojson }}{% else %}""{% endif %},
+                    required: {% if field.required %}1{% else %}0{% endif %}
+                };
+                {% endfor %}
+                </script>
+                {% for field in fields %}
+                <div class="field-item" data-field-id="{{ field.id }}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <strong>{{ field.label }}</strong>
+                            <span class="badge bg-secondary ms-2">{{ field.field_type }}</span>
+                            {% if field.required %}
+                            <span class="badge bg-warning ms-1">Required</span>
+                            {% endif %}
+                            {% if field.options %}
+                            <div class="small text-muted mt-1">Options: {{ field.options.replace('\n', ', ') }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="field-actions">
+                            <button type="button" class="btn btn-sm btn-primary edit-field-btn" 
+                                    data-field-id="{{ field.id }}">Edit</button>
+                            <form method="POST" class="d-inline" onsubmit="return confirm('Delete this field? All values will be lost.');">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="field_id" value="{{ field.id }}">
+                                <button type="submit" class="btn btn-sm btn-danger" onclick="event.stopPropagation();">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="text-muted">No fields yet. Add your first field using the form on the left.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Field Modal -->
+<div class="modal fade" id="editFieldModal" tabindex="-1" aria-labelledby="editFieldModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editFieldModalLabel">Edit Field</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" id="editFieldForm">
+                <input type="hidden" name="action" value="edit">
+                <input type="hidden" name="field_id" id="edit_field_id">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_label" class="form-label">Field Label</label>
+                        <input type="text" class="form-control" id="edit_label" name="label" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_field_type" class="form-label">Field Type</label>
+                        <select class="form-select" id="edit_field_type" name="field_type" required onchange="toggleEditOptions()">
+                            <option value="text">Text</option>
+                            <option value="textarea">Multiline Text</option>
+                            <option value="email">Email</option>
+                            <option value="integer">Integer</option>
+                            <option value="number">Number (Decimal)</option>
+                            <option value="datetime">Date/Time</option>
+                            <option value="select">Select (Dropdown)</option>
+                            <option value="radio">Radio Button</option>
+                            <option value="checkbox_list">Checkbox</option>
+                            <option value="image">Image</option>
+                            <option value="image_album">Image Album (Multiple Images)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="editOptionsDiv" style="display: none;">
+                        <label for="edit_options" class="form-label">Options (one per line)</label>
+                        <textarea class="form-control" id="edit_options" name="options" rows="4"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="edit_required" name="required">
+                            <label class="form-check-label" for="edit_required">Required Field</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleOptions() {
+    const fieldType = document.getElementById('field_type').value;
+    const optionsDiv = document.getElementById('optionsDiv');
+    if (fieldType === 'select' || fieldType === 'radio' || fieldType === 'checkbox_list') {
+        optionsDiv.style.display = 'block';
+        document.getElementById('options').required = true;
+    } else {
+        optionsDiv.style.display = 'none';
+        document.getElementById('options').required = false;
+    }
+}
+
+function toggleEditOptions() {
+    const fieldType = document.getElementById('edit_field_type').value;
+    const optionsDiv = document.getElementById('editOptionsDiv');
+    if (fieldType === 'select' || fieldType === 'radio' || fieldType === 'checkbox_list') {
+        optionsDiv.style.display = 'block';
+    } else {
+        optionsDiv.style.display = 'none';
+    }
+}
+
+function editField(id, label, fieldType, options, required) {
+    console.log('editField function called');
+    const modalElement = document.getElementById('editFieldModal');
+    if (!modalElement) {
+        alert('Error: Edit modal not found');
+        console.error('Modal element not found');
+        return;
+    }
+    
+    console.log('Setting form values');
+    // Set form values
+    document.getElementById('edit_field_id').value = id;
+    document.getElementById('edit_label').value = label || '';
+    document.getElementById('edit_field_type').value = fieldType || 'text';
+    document.getElementById('edit_options').value = options || '';
+    document.getElementById('edit_required').checked = required === 1;
+    toggleEditOptions();
+    
+    console.log('Showing modal');
+    // Show modal using Bootstrap
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        console.log('Using Bootstrap modal');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        modal.show();
+    } else {
+        console.log('Bootstrap not found, using fallback');
+        // Fallback if bootstrap is not loaded
+        modalElement.classList.add('show');
+        modalElement.style.display = 'block';
+        modalElement.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.id = 'modal-backdrop';
+        document.body.appendChild(backdrop);
+    }
+}
+
+// Make function globally accessible
+window.editField = editField;
+
+// Add event listeners to Edit buttons
+function setupEditButtons() {
+    const editButtons = document.querySelectorAll('.edit-field-btn');
+    console.log('Found', editButtons.length, 'Edit buttons');
+    
+    editButtons.forEach(button => {
+        // Make sure button is not draggable
+        button.draggable = false;
+        button.style.cursor = 'pointer';
+        
+        // Remove any existing listeners by cloning
+        const newButton = button.cloneNode(true);
+        button.parentNode.replaceChild(newButton, button);
+        
+        newButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            console.log('Edit button clicked!');
+            
+            const fieldId = this.getAttribute('data-field-id');
+            console.log('Field ID:', fieldId);
+            console.log('window.fieldData exists?', !!window.fieldData);
+            
+            if (!window.fieldData) {
+                console.error('window.fieldData not found');
+                alert('Error: Field data not initialized');
+                return;
+            }
+            
+            console.log('window.fieldData:', window.fieldData);
+            console.log('Available keys:', Object.keys(window.fieldData));
+            
+            // Look up field data using string key
+            const fieldData = window.fieldData[fieldId];
+            
+            if (!fieldData) {
+                console.error('Field data not found for field', fieldId);
+                console.log('Trying numeric key:', parseInt(fieldId));
+                const fieldDataNum = window.fieldData[parseInt(fieldId)];
+                if (fieldDataNum) {
+                    console.log('Found using numeric key');
+                    editField(fieldDataNum.id, fieldDataNum.label, fieldDataNum.field_type, fieldDataNum.options || '', fieldDataNum.required);
+                    return;
+                }
+                alert('Error: Could not load field data for field ' + fieldId);
+                return;
+            }
+            
+            console.log('Found field data:', fieldData);
+            editField(fieldData.id, fieldData.label, fieldData.field_type, fieldData.options || '', fieldData.required);
+        });
+    });
+}
+
+// Initialize when DOM is ready
+function initializePage() {
+    setupEditButtons();
+    
+    // Simple drag and drop for reordering
+    let draggedElement = null;
+    document.querySelectorAll('.field-item').forEach(item => {
+        // Make only the main content area draggable, not buttons
+        const contentArea = item.querySelector('.flex-grow-1');
+        if (contentArea) {
+            contentArea.style.cursor = 'move';
+            contentArea.draggable = true;
+            
+            contentArea.addEventListener('dragstart', (e) => {
+                draggedElement = item;
+                item.style.opacity = '0.5';
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            
+            contentArea.addEventListener('dragend', () => {
+                item.style.opacity = '1';
+            });
+        }
+        
+        // Make the whole item a drop target
+        item.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+        
+        item.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (draggedElement && draggedElement !== item) {
+                const container = document.getElementById('fieldsList');
+                const items = Array.from(container.children);
+                const draggedIndex = items.indexOf(draggedElement);
+                const targetIndex = items.indexOf(item);
+                
+                if (draggedIndex < targetIndex) {
+                    container.insertBefore(draggedElement, item.nextSibling);
+                } else {
+                    container.insertBefore(draggedElement, item);
+                }
+                
+                // Save new order
+                const order = Array.from(container.children).map(el => el.dataset.fieldId);
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.innerHTML = `
+                    <input type="hidden" name="action" value="reorder">
+                    <input type="hidden" name="order" value='${JSON.stringify(order)}'>
+                `;
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+    });
+}
+
+// Run initialization when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializePage);
+} else {
+    initializePage();
+}
+</script>
+{% endblock %}
+

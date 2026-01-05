@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - Personal Database{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        border: none;
+        border-radius: 12px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        height: 100%;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    }
+    
+    .stat-card .card-body {
+        padding: 1.5rem;
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #0d6efd;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .stat-card.bg-primary .stat-number,
+    .stat-card.bg-success .stat-number,
+    .stat-card.bg-info .stat-number,
+    .stat-card.bg-warning .stat-number {
+        color: white;
+    }
+    
+    .stat-card.bg-primary .stat-label,
+    .stat-card.bg-success .stat-label,
+    .stat-card.bg-info .stat-label,
+    .stat-card.bg-warning .stat-label {
+        color: rgba(255, 255, 255, 0.9);
+    }
+    
+    .user-table {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .admin-section {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-shield-check"></i> Admin Panel</h1>
+    <div>
+        <div class="btn-group me-2" role="group">
+            <a href="/admin/backup/all" class="btn btn-success">
+                <i class="bi bi-download"></i> Full Backup (JSON)
+            </a>
+            <a href="/admin/backup/all/csv" class="btn btn-info">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Full Backup (CSV)
+            </a>
+        </div>
+        <a href="/admin/users" class="btn btn-primary">
+            <i class="bi bi-people"></i> Manage Users
+        </a>
+        <a href="/dashboard" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- System Statistics -->
+<div class="admin-section">
+    <h2 class="mb-4"><i class="bi bi-bar-chart"></i> System Statistics</h2>
+    
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card bg-primary text-white">
+                <div class="card-body text-center">
+                    <div class="stat-number">{{ stats.total_users }}</div>
+                    <div class="stat-label">Total Users</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-success text-white">
+                <div class="card-body text-center">
+                    <div class="stat-number">{{ stats.total_sections }}</div>
+                    <div class="stat-label">Sections</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-info text-white">
+                <div class="card-body text-center">
+                    <div class="stat-number">{{ stats.total_categories }}</div>
+                    <div class="stat-label">Categories</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-warning text-white">
+                <div class="card-body text-center">
+                    <div class="stat-number">{{ stats.total_entities }}</div>
+                    <div class="stat-label">Entities</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="card-body text-center">
+                    <div class="stat-number">{{ stats.total_fields }}</div>
+                    <div class="stat-label">Custom Fields</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="card-body text-center">
+                    <div class="stat-number">{{ stats.total_tags }}</div>
+                    <div class="stat-label">Tags</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="card-body text-center">
+                    <div class="stat-number">{{ stats.total_field_values }}</div>
+                    <div class="stat-label">Field Values</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="card-body text-center">
+                    <div class="stat-number">{{ stats.total_entity_tags }}</div>
+                    <div class="stat-label">Entity-Tag Links</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Storage Information -->
+<div class="admin-section">
+    <h2 class="mb-4"><i class="bi bi-hdd"></i> Storage Information</h2>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Upload Folder</h5>
+                    <p class="card-text">
+                        <strong>Total Files:</strong> {{ upload_count }}<br>
+                        <strong>Total Size:</strong> {{ upload_size }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Backup Information -->
+<div class="admin-section">
+    <h2 class="mb-4"><i class="bi bi-download"></i> Data Backup</h2>
+    <div class="alert alert-info">
+        <h5><i class="bi bi-info-circle"></i> Backup Information</h5>
+        <p class="mb-2">Download complete system backups in JSON or CSV format. Backups include:</p>
+        <ul class="mb-2">
+            <li>All users and their data</li>
+            <li>Sections and categories</li>
+            <li>Entities and field values</li>
+            <li>Tags and relationships</li>
+            <li>Custom field definitions</li>
+        </ul>
+        <p class="mb-2"><strong>Format Options:</strong></p>
+        <ul class="mb-2">
+            <li><strong>JSON:</strong> Complete structured data with all relationships (best for data restoration)</li>
+            <li><strong>CSV:</strong> Flat spreadsheet format (best for analysis in Excel/Google Sheets)</li>
+        </ul>
+        <p class="mb-0"><strong>Note:</strong> Uploaded images are not included in backups. You may need to backup the <code>static/uploads</code> folder separately.</p>
+    </div>
+    <div class="d-grid gap-2 d-md-block">
+        <a href="/admin/backup/all" class="btn btn-success btn-lg me-2">
+            <i class="bi bi-download"></i> Download Full Backup (JSON)
+        </a>
+        <a href="/admin/backup/all/csv" class="btn btn-info btn-lg">
+            <i class="bi bi-file-earmark-spreadsheet"></i> Download Full Backup (CSV)
+        </a>
+    </div>
+</div>
+
+<!-- Admin Users -->
+{% if admin_users %}
+<div class="admin-section">
+    <h2 class="mb-4"><i class="bi bi-shield-check"></i> Admin Users</h2>
+    <div class="alert alert-info">
+        <p class="mb-2"><strong>Current Administrators:</strong></p>
+        <ul class="mb-0">
+            {% for admin in admin_users %}
+            <li><strong>{{ admin.username }}</strong> (ID: {{ admin.id }}){% if admin.id == 1 %} - <em>First registered user</em>{% endif %}</li>
+            {% endfor %}
+        </ul>
+        <p class="mt-2 mb-0"><small>Note: The first registered user (ID: 1) is automatically set as admin. You can manage admin privileges in the <a href="/admin/users">User Management</a> page.</small></p>
+    </div>
+</div>
+{% endif %}
+
+<!-- User Breakdown -->
+<div class="admin-section">
+    <h2 class="mb-4"><i class="bi bi-people"></i> User Breakdown</h2>
+    <div class="user-table">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Sections</th>
+                    <th>Categories</th>
+                    <th>Entities</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in user_stats %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td><strong>{{ user.username }}</strong></td>
+                    <td><span class="badge bg-primary">{{ user.sections }}</span></td>
+                    <td><span class="badge bg-info">{{ user.categories }}</span></td>
+                    <td><span class="badge bg-success">{{ user.entities }}</span></td>
+                    <td>
+                        <a href="/admin/user/{{ user.id }}/data" class="btn btn-sm btn-primary me-2">
+                            <i class="bi bi-eye"></i> View Data
+                        </a>
+                        <a href="/admin/users" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-people"></i> Manage
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}New Category - Personal Database{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h3>Create New Category</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Category Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required autofocus>
+                        <small class="form-text text-muted">e.g., Classmate, Lecturer, Pet, Favorite Millionaire</small>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Create Category</button>
+                        <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

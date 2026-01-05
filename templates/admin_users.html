@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - Admin Panel{% endblock %}
+
+{% block extra_css %}
+<style>
+    .user-card {
+        border: none;
+        border-radius: 12px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1.5rem;
+    }
+    
+    .user-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    }
+    
+    .user-stats {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .stat-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-weight: 500;
+    }
+    
+    .user-table {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-people"></i> User Management</h1>
+    <div>
+        <div class="btn-group me-2" role="group">
+            <a href="/admin/backup/all" class="btn btn-success">
+                <i class="bi bi-download"></i> Full Backup (JSON)
+            </a>
+            <a href="/admin/backup/all/csv" class="btn btn-info">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Full Backup (CSV)
+            </a>
+        </div>
+        <a href="/admin" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Admin Panel
+        </a>
+    </div>
+</div>
+
+<div class="user-table">
+    <table class="table table-hover mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Admin</th>
+                <th>Sections</th>
+                <th>Categories</th>
+                <th>Entities</th>
+                <th>Fields</th>
+                <th>Tags</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.id }}</td>
+                <td>
+                    <strong>{{ user.username }}</strong>
+                    {% if user.id == 1 %}
+                    <span class="badge bg-secondary ms-1" title="First registered user">First User</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if user.is_admin %}
+                    <span class="badge bg-success"><i class="bi bi-shield-check"></i> Admin</span>
+                    {% else %}
+                    <span class="badge bg-secondary">User</span>
+                    {% endif %}
+                </td>
+                <td><span class="badge bg-primary">{{ user.sections }}</span></td>
+                <td><span class="badge bg-info">{{ user.categories }}</span></td>
+                <td><span class="badge bg-success">{{ user.entities }}</span></td>
+                <td><span class="badge bg-warning text-dark">{{ user.fields }}</span></td>
+                <td><span class="badge bg-secondary">{{ user.tags }}</span></td>
+                <td>
+                    <a href="/admin/user/{{ user.id }}/data" class="btn btn-sm btn-primary me-2">
+                        <i class="bi bi-eye"></i> View Data
+                    </a>
+                    <div class="btn-group me-2" role="group">
+                        <a href="/admin/user/{{ user.id }}/backup" class="btn btn-sm btn-success">
+                            <i class="bi bi-download"></i> JSON
+                        </a>
+                        <a href="/admin/user/{{ user.id }}/backup/csv" class="btn btn-sm btn-info">
+                            <i class="bi bi-file-earmark-spreadsheet"></i> CSV
+                        </a>
+                    </div>
+                    {% if user.id != session.user_id %}
+                    <form method="POST" action="/admin/user/{{ user.id }}/toggle-admin" class="d-inline me-2" onsubmit="return confirm('{% if user.is_admin %}Remove{% else %}Grant{% endif %} admin privileges for {{ user.username }}?');">
+                        <button type="submit" class="btn btn-sm {% if user.is_admin %}btn-warning{% else %}btn-outline-success{% endif %}">
+                            <i class="bi bi-shield-{% if user.is_admin %}slash{% else %}check{% endif %}"></i> {% if user.is_admin %}Remove Admin{% else %}Make Admin{% endif %}
+                        </button>
+                    </form>
+                    <form method="POST" action="/admin/user/{{ user.id }}/delete" class="d-inline" onsubmit="return confirm('Are you sure you want to delete user {{ user.username }}? This will permanently delete all their data including sections, categories, entities, and uploaded files. This action cannot be undone!');">
+                        <button type="submit" class="btn btn-sm btn-danger">
+                            <i class="bi bi-trash"></i> Delete
+                        </button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted">Current User</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="alert alert-warning mt-4">
+    <i class="bi bi-exclamation-triangle"></i> <strong>Warning:</strong> Deleting a user will permanently remove all their data including sections, categories, entities, fields, tags, and uploaded files. This action cannot be undone!
+</div>
+
+{% endblock %}
+

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.name }} - {{ user.username }} - Admin Panel{% endblock %}
+
+{% block extra_css %}
+<style>
+    .entity-card {
+        transition: transform 0.2s;
+    }
+    .entity-card:hover {
+        transform: translateY(-5px);
+    }
+    .tag-badge {
+        display: inline-block;
+        margin: 2px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.85em;
+    }
+    .admin-badge {
+        background: #6c757d;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1>
+            <span class="admin-badge">ADMIN VIEW</span> {{ category.name }}
+        </h1>
+        <p class="text-muted">User: {{ user.username }} (ID: {{ user.id }})</p>
+    </div>
+    <div>
+        <a href="/admin/user/{{ user.id }}/data" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to User Data
+        </a>
+        <a href="/admin/users" class="btn btn-outline-primary">
+            <i class="bi bi-people"></i> All Users
+        </a>
+    </div>
+</div>
+
+<!-- Category Info -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Category Information</h5>
+        <p class="mb-1"><strong>Created:</strong> {{ category.created_at }}</p>
+        <p class="mb-1"><strong>Total Entities:</strong> {{ entities_with_tags|length }}</p>
+        <p class="mb-1"><strong>Total Fields:</strong> {{ fields|length }}</p>
+        <p class="mb-0"><strong>Total Tags:</strong> {{ all_tags|length }}</p>
+    </div>
+</div>
+
+<!-- Entities Grid -->
+<div id="entitiesContainer" class="row">
+    {% for item in entities_with_tags %}
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-4 entity-item" data-entity-id="{{ item.entity.id }}">
+        <div class="card entity-card h-100">
+            <!-- Image Section -->
+            {% if item.primary_image %}
+                <a href="/admin/user/{{ user.id }}/category/{{ category.id }}/entity/{{ item.entity.id }}" style="text-decoration: none; display: block;">
+                    <div class="entity-image-container" style="cursor: pointer;">
+                        <img src="{{ url_for('static', filename='uploads/' + item.primary_image) }}" alt="{{ item.entity.name }}" class="entity-card-image">
+                    </div>
+                </a>
+            {% else %}
+                <a href="/admin/user/{{ user.id }}/category/{{ category.id }}/entity/{{ item.entity.id }}" style="text-decoration: none; display: block;">
+                    <div class="entity-image-container" style="cursor: pointer;">
+                        <div class="entity-placeholder-image">
+                            <i class="bi bi-image" style="font-size: 3rem; color: #dee2e6;"></i>
+                        </div>
+                    </div>
+                </a>
+            {% endif %}
+            
+            <div class="card-body">
+                <h5 class="card-title mb-2">{{ item.entity.name }}</h5>
+                
+                <!-- Tags -->
+                {% if item.tags %}
+                <div class="mb-2">
+                    {% for tag in item.tags %}
+                    <span class="tag-badge" style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}">
+                        {{ tag.name }}
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <!-- Other Fields (non-image) -->
+                {% if fields %}
+                <div class="entity-fields small text-muted">
+                    {% for field in fields %}
+                        {% if field.field_type != 'image' and field.field_type != 'image_album' %}
+                            {% set value = item.field_values.get(field.id, '') if item.field_values else '' %}
+                            {% if value %}
+                            <div class="mb-1"><strong>{{ field.label }}:</strong> 
+                                {% if value|length > 30 %}
+                                {{ value[:30] }}...
+                                {% else %}
+                                {{ value }}
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="card-footer bg-transparent border-top-0">
+                <div class="d-grid">
+                    <a href="/admin/user/{{ user.id }}/category/{{ category.id }}/entity/{{ item.entity.id }}" class="btn btn-sm btn-primary">View Details</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if entities_with_tags|length == 0 %}
+<div class="alert alert-info">
+    <h4>No entities yet!</h4>
+    <p>This category doesn't have any entities yet.</p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Entity - {{ category.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Edit Entity: {{ entity.name }}</h1>
+    <a href="/category/{{ category.id }}" class="btn btn-secondary">Back</a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Entity Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" value="{{ entity.name }}" required autofocus>
+                    </div>
+                    
+                    {% if fields %}
+                    <hr>
+                    <h5>Fields</h5>
+                    {% for field in fields %}
+                    <div class="mb-3">
+                        <label for="field_{{ field.id }}" class="form-label">
+                            {{ field.label }}
+                            {% if field.required %}<span class="text-danger">*</span>{% endif %}
+                        </label>
+                        
+                        {% set current_value = field_values.get(field.id, '') %}
+                        
+                        {% if field.field_type == 'text' %}
+                        <input type="text" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" value="{{ current_value }}" {% if field.required %}required{% endif %}>
+                        
+                        {% elif field.field_type == 'textarea' %}
+                        <textarea class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" rows="4" {% if field.required %}required{% endif %}>{{ current_value }}</textarea>
+                        
+                        {% elif field.field_type == 'email' %}
+                        <input type="email" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" value="{{ current_value }}" {% if field.required %}required{% endif %}>
+                        
+                        {% elif field.field_type == 'integer' %}
+                        <input type="number" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" value="{{ current_value }}" step="1" {% if field.required %}required{% endif %}>
+                        
+                        {% elif field.field_type == 'number' %}
+                        <input type="number" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" value="{{ current_value }}" step="0.01" {% if field.required %}required{% endif %}>
+                        
+                        {% elif field.field_type == 'datetime' %}
+                        <input type="datetime-local" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" value="{{ current_value }}" {% if field.required %}required{% endif %}>
+                        
+                        {% elif field.field_type == 'select' %}
+                        <select class="form-select" id="field_{{ field.id }}" name="field_{{ field.id }}" {% if field.required %}required{% endif %}>
+                            <option value="">-- Select --</option>
+                            {% for option in field.options.splitlines() %}
+                            {% if option.strip() %}
+                            <option value="{{ option.strip() }}" {% if current_value == option.strip() %}selected{% endif %}>{{ option.strip() }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                        
+                        {% elif field.field_type == 'radio' %}
+                        <div>
+                            {% for option in field.options.splitlines() %}
+                            {% if option.strip() %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="field_{{ field.id }}" id="field_{{ field.id }}_{{ loop.index }}" value="{{ option.strip() }}" {% if current_value == option.strip() %}checked{% endif %} {% if field.required %}required{% endif %}>
+                                <label class="form-check-label" for="field_{{ field.id }}_{{ loop.index }}">{{ option.strip() }}</label>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        
+                        {% elif field.field_type == 'checkbox' %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="field_{{ field.id }}" name="field_{{ field.id }}" value="Yes" {% if current_value == 'Yes' %}checked{% endif %}>
+                            <label class="form-check-label" for="field_{{ field.id }}">Yes</label>
+                        </div>
+                        
+                        {% elif field.field_type == 'checkbox_list' %}
+                        <div>
+                            {% if field.options %}
+                            {% set options_list = field.options.splitlines() if '\n' in field.options else field.options.split() %}
+                            {% set selected_values = current_value.split(',') if current_value else [] %}
+                            {% for option in options_list %}
+                            {% if option.strip() %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="field_{{ field.id }}" id="field_{{ field.id }}_{{ loop.index }}" value="{{ option.strip() }}" {% if option.strip() in selected_values %}checked{% endif %}>
+                                <label class="form-check-label" for="field_{{ field.id }}_{{ loop.index }}">{{ option.strip() }}</label>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                            {% else %}
+                            <p class="text-muted small">No options defined. Please edit this field to add options.</p>
+                            {% endif %}
+                        </div>
+                        
+                        {% elif field.field_type == 'image' %}
+                        {% if current_value %}
+                        <div class="mb-2">
+                            <img src="{{ url_for('static', filename='uploads/' + current_value) }}" alt="{{ field.label }}" class="entity-image">
+                            <p class="small text-muted">Current image</p>
+                        </div>
+                        {% endif %}
+                        <input type="file" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" accept="image/*" {% if not current_value and field.required %}required{% endif %}>
+                        <small class="form-text text-muted">Accepted formats: PNG, JPG, JPEG, GIF, WEBP (Max 16MB). Leave empty to keep current image.</small>
+                        
+                        {% elif field.field_type == 'image_album' %}
+                        {% if current_value %}
+                        <div class="mb-3">
+                            <label class="form-label small">Current Images:</label>
+                            <div class="image-album-current mb-2" id="current_album_{{ field.id }}">
+                                {% set image_list = current_value|from_json if current_value else [] %}
+                                {% for img_filename in image_list %}
+                                <div class="image-album-item d-inline-block me-2 mb-2 position-relative">
+                                    <img src="{{ url_for('static', filename='uploads/' + img_filename) }}" alt="{{ field.label }}" class="img-thumbnail" style="width: 150px; height: 150px; object-fit: cover;">
+                                    <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 image-delete-btn" data-filename="{{ img_filename }}" data-field-id="{{ field.id }}" style="padding: 2px 6px; font-size: 0.7rem;">×</button>
+                                    <input type="hidden" name="keep_image_{{ field.id }}" value="{{ img_filename }}">
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        <input type="file" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" accept="image/*" multiple>
+                        <small class="form-text text-muted">Accepted formats: PNG, JPG, JPEG, GIF, WEBP (Max 16MB per image). Select additional images to add to the album.</small>
+                        <div id="preview_{{ field.id }}" class="mt-3 image-album-preview"></div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                    
+                    {% if tags %}
+                    <hr>
+                    <h5>Tags</h5>
+                    <div class="mb-3">
+                        {% for tag in tags %}
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="tags" id="tag_{{ tag.id }}" value="{{ tag.id }}" {% if tag.id in entity_tag_ids %}checked{% endif %}>
+                            <label class="form-check-label" for="tag_{{ tag.id }}" style="color: {{ tag.color }};">
+                                {{ tag.name }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Update Entity</button>
+                        <a href="/category/{{ category.id }}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Image album preview and deletion for edit entity
+document.querySelectorAll('input[type="file"][multiple]').forEach(input => {
+    input.addEventListener('change', function(e) {
+        const fieldId = this.id.replace('field_', '');
+        const previewDiv = document.getElementById('preview_' + fieldId);
+        if (!previewDiv) return;
+        
+        previewDiv.innerHTML = '';
+        
+        if (this.files && this.files.length > 0) {
+            Array.from(this.files).forEach((file, index) => {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = 'img-thumbnail me-2 mb-2';
+                        img.style.width = '150px';
+                        img.style.height = '150px';
+                        img.style.objectFit = 'cover';
+                        previewDiv.appendChild(img);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
+    });
+});
+
+// Handle image deletion
+document.querySelectorAll('.image-delete-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const filename = this.getAttribute('data-filename');
+        const fieldId = this.getAttribute('data-field-id');
+        const item = this.closest('.image-album-item');
+        
+        if (!item) return;
+        
+        // Remove the hidden input to mark image for deletion
+        const hiddenInput = item.querySelector('input[name^="keep_image_"]');
+        if (hiddenInput) {
+            hiddenInput.name = 'delete_image_' + fieldId;
+            hiddenInput.value = filename;
+        }
+        
+        // Add fade-out animation and then remove the element
+        item.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        item.style.opacity = '0';
+        item.style.transform = 'scale(0.8)';
+        
+        // Remove the element after animation
+        setTimeout(() => {
+            item.remove();
+        }, 300);
+    });
+});
+</script>
+{% endblock %}
+

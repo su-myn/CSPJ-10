@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}Compare Entities - {{ category.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .compare-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        overflow: visible;
+        background: #ffffff;
+    }
+    .field-row {
+        display: grid;
+        gap: 0;
+        align-items: start;
+        {% if num_entities == 1 %}
+        grid-template-columns: 1fr;
+        {% elif num_entities == 2 %}
+        grid-template-columns: 1fr 1fr;
+        {% elif num_entities == 3 %}
+        grid-template-columns: 1fr 1fr 1fr;
+        {% elif num_entities == 4 %}
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        {% endif %}
+        margin-bottom: 0;
+    }
+    .field-row.header-row {
+        margin-bottom: 10px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: #ffffff;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .field-row.header-row .field-cell {
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        position: relative;
+        padding: 15px;
+        background: #ffffff;
+    }
+    .field-row.header-row .entity-name {
+        margin-bottom: 8px;
+        font-size: 1.3em;
+        padding-bottom: 8px;
+    }
+    .field-row:not(.header-row) {
+        margin-bottom: 0;
+        border-top: 1px solid #e9ecef;
+    }
+    .field-cell {
+        border: none;
+        border-right: 1px solid #e9ecef;
+        padding: 6px 12px;
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+    }
+    .field-row .field-cell:last-child {
+        border-right: none;
+    }
+    .field-row:not(.header-row) {
+        border-top: 1px solid #e9ecef;
+    }
+    .field-row:last-of-type:not(.header-row) .field-cell {
+        border-bottom: 1px solid #e9ecef;
+    }
+    .field-row.header-row .field-cell {
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+    }
+    .compare-card {
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        background: #ffffff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+    }
+    .compare-image-wrapper {
+        text-align: center;
+        margin-bottom: 10px;
+        flex-shrink: 0;
+    }
+    .compare-image {
+        width: 200px;
+        height: 200px;
+        object-fit: cover;
+        border-radius: 4px;
+        display: block;
+        margin: 0 auto;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+    .compare-image:hover {
+        opacity: 0.8;
+    }
+    .compare-fields-wrapper {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+    }
+    .compare-field {
+        margin-bottom: 0;
+        padding: 6px 0;
+        min-height: auto;
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        line-height: 1.5;
+    }
+    .field-label {
+        font-weight: bold;
+        color: #000000;
+        margin-right: 8px;
+        font-size: 0.9em;
+        flex-shrink: 0;
+        min-width: auto;
+    }
+    .field-label::after {
+        content: ':';
+        margin-left: 0;
+    }
+    .field-value {
+        color: #212529;
+        font-size: 0.9em;
+        word-wrap: break-word;
+        flex: 1;
+        min-height: auto;
+        display: inline;
+        line-height: 1.5;
+    }
+    .compare-field.textarea-field {
+        padding: 6px 0;
+        min-height: auto !important;
+        align-items: flex-start;
+        margin-bottom: 0;
+        flex-direction: column;
+    }
+    .compare-field.textarea-field .field-label {
+        margin-right: 0;
+        margin-bottom: 8px;
+    }
+    .compare-field.textarea-field .field-label::after {
+        content: '';
+    }
+    .compare-field.textarea-field .field-value {
+        width: 100%;
+    }
+    .compare-field.image-album-field {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .compare-field.image-album-field .field-label {
+        margin-right: 0;
+        margin-bottom: 8px;
+    }
+    .compare-field.image-album-field .field-label::after {
+        content: '';
+    }
+    .compare-field.image-album-field .field-value {
+        width: 100%;
+    }
+    .tag-badge {
+        display: inline-block;
+        margin: 2px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.85em;
+        font-weight: 500;
+    }
+    .entity-name {
+        font-size: 1.5em;
+        font-weight: bold;
+        margin-bottom: 20px;
+        color: #007bff;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 10px;
+    }
+    @media (max-width: 1200px) {
+        .field-row {
+            {% if num_entities >= 4 %}
+            grid-template-columns: 1fr 1fr;
+            {% endif %}
+        }
+    }
+    @media (max-width: 768px) {
+        .field-row {
+            grid-template-columns: 1fr;
+        }
+    }
+    /* Image album styling for compare page - 3 photos per row */
+    .compare-field .image-album-container {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+    .compare-field .image-album-img {
+        height: 100px;
+        width: 100%;
+        object-fit: cover;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+    .compare-field .image-album-img:hover {
+        opacity: 0.8;
+    }
+    @media (max-width: 768px) {
+        .compare-field .image-album-container {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .compare-field .image-album-img {
+            height: 80px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Compare: {{ category.name }} ({{ num_entities }} {{ 'entity' if num_entities == 1 else 'entities' }})</h1>
+    <a href="/category/{{ category.id }}" class="btn btn-secondary">Back to Category</a>
+</div>
+
+<div class="compare-container">
+    <!-- Header row with entity names and images -->
+    <div class="field-row header-row">
+        {% for entity_data in entities_data %}
+        <div class="field-cell">
+            <div class="entity-name">{{ entity_data.entity.name }}</div>
+            {% if entity_data.primary_image %}
+            <div class="compare-image-wrapper">
+                <img src="{{ url_for('static', filename='uploads/' + entity_data.primary_image) }}" alt="{{ entity_data.entity.name }}" class="compare-image" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + entity_data.primary_image) }}" onclick="showImageModal(this.getAttribute('data-image-src'))">
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Tags row -->
+    <div class="field-row">
+        {% for entity_data in entities_data %}
+        <div class="field-cell">
+            <div class="compare-field" data-field="tags">
+                <div class="field-label">Tags</div>
+                <div class="field-value">
+                    {% if entity_data.tags %}
+                        {% for tag in entity_data.tags %}
+                        <span class="tag-badge" style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}">
+                            {{ tag.name }}
+                        </span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Field rows - one row per field type -->
+    {% for field in fields %}
+    {% if field.field_type != 'image' %}
+    <div class="field-row">
+        {% for entity_data in entities_data %}
+        <div class="field-cell">
+            <div class="compare-field{% if field.field_type == 'textarea' %} textarea-field{% elif field.field_type == 'image_album' %} image-album-field{% endif %}" data-field-id="{{ field.id }}">
+                <div class="field-label">{{ field.label }}</div>
+                {% set field_id_int = field.id|int %}
+                {% set raw_value = entity_data.field_values.get(field_id_int, '') or entity_data.field_values.get(field.id, '') or '' %}
+                {% if field.field_type == 'textarea' %}
+                    {# Ensure textarea values are trimmed of leading/trailing whitespace and newlines #}
+                    {% if raw_value %}
+                        {% set value = raw_value.strip() %}
+                        {# Remove any leading/trailing newlines that strip() might have missed #}
+                        {% set value = value.lstrip('\n\r') %}
+                        {% set value = value.rstrip('\n\r') %}
+                    {% else %}
+                        {% set value = '' %}
+                    {% endif %}
+                    <div class="field-value" style="white-space: pre-line; word-wrap: break-word;">
+                        {{ value if value else '<span class="text-muted">—</span>'|safe }}
+                    </div>
+                {% else %}
+                    <div class="field-value{% if field.field_type == 'textarea' %} textarea-value{% endif %}">
+                        {% set value = raw_value %}
+                        {% if value %}
+                            {% if field.field_type == 'checkbox' %}
+                            {{ 'Yes' if value == 'Yes' else 'No' }}
+                            {% elif field.field_type == 'checkbox_list' %}
+                            {% set selected_values = value.split(',') %}
+                            {% for val in selected_values %}
+                            {% if val.strip() %}
+                            <span class="badge bg-primary me-1">{{ val.strip() }}</span>
+                            {% endif %}
+                            {% endfor %}
+                            {% elif field.field_type == 'image_album' %}
+                            {% set image_list = value|from_json if value else [] %}
+                            {% if image_list %}
+                            <div class="image-album-container">
+                                {% for img_filename in image_list %}
+                                <div class="image-album-item">
+                                    <img src="{{ url_for('static', filename='uploads/' + img_filename) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + img_filename) }}" onclick="showImageModal(this.getAttribute('data-image-src'))">
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="text-muted">No images</span>
+                            {% endif %}
+                            {% else %}
+                            {{ value }}
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<div class="mt-4 text-center">
+    <a href="/category/{{ category.id }}" class="btn btn-primary">Back to Category</a>
+</div>
+
+{% block extra_js %}
+<script>
+// Synchronize cell heights within each field row for proper alignment
+function syncFieldHeights() {
+    const fieldRows = document.querySelectorAll('.field-row');
+    
+    fieldRows.forEach(row => {
+        const cells = row.querySelectorAll('.field-cell');
+        if (cells.length <= 1) return;
+        
+        // Reset heights to get natural height
+        cells.forEach(cell => {
+            cell.style.height = 'auto';
+        });
+        
+        // Find max height in this row
+        const heights = Array.from(cells).map(cell => cell.offsetHeight);
+        const maxHeight = Math.max(...heights);
+        
+        // Apply max height to all cells in this row (except textarea fields)
+        if (maxHeight > 0) {
+            cells.forEach(cell => {
+                const hasTextarea = cell.querySelector('.textarea-field');
+                if (!hasTextarea) {
+                    cell.style.height = maxHeight + 'px';
+                }
+            });
+        }
+    });
+}
+
+// Run on page load
+document.addEventListener('DOMContentLoaded', syncFieldHeights);
+
+// Also run after images load (in case images affect layout)
+window.addEventListener('load', syncFieldHeights);
+
+// Run again after a short delay to ensure everything is rendered
+setTimeout(syncFieldHeights, 100);
+
+// Image modal function
+function showImageModal(imageSrc) {
+    document.getElementById('modalImage').src = imageSrc;
+}
+</script>
+{% endblock %}
+
+<!-- Image Modal -->
+<div class="modal fade" id="imageModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Image</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalImage" src="" alt="Image" class="img-fluid">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Personal Database{% endblock %}
+
+{% block extra_css %}
+<style>
+    .category-card {
+        border: none;
+        border-radius: 12px;
+        overflow: hidden;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .category-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    }
+    
+    .category-card-body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        min-height: 120px;
+    }
+    
+    .category-card-body.color-0 {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .category-card-body.color-1 {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    
+    .category-card-body.color-2 {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .category-card-body.color-3 {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+    
+    .category-card-body.color-4 {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+    }
+    
+    .category-card-body.color-5 {
+        background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+    }
+    
+    .category-card-body.color-6 {
+        background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+    }
+    
+    .category-card-body.color-7 {
+        background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+    }
+    
+    .category-card-body.color-8 {
+        background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+    }
+    
+    .category-card-body.color-9 {
+        background: linear-gradient(135deg, #ff6e7f 0%, #bfe9ff 100%);
+    }
+    
+    .category-card-body a {
+        color: white !important;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    .category-card-body a:hover {
+        color: #f0f0f0 !important;
+        text-decoration: underline !important;
+    }
+    
+    .category-card-footer {
+        background: white;
+        border-top: none;
+        padding: 12px;
+    }
+    
+    .section-header {
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .section-toggle-icon {
+        display: inline-block;
+        transition: transform 0.3s ease;
+        margin-right: 10px;
+        font-size: 1.2rem;
+    }
+    
+    .section-toggle-icon.collapsed {
+        transform: rotate(-90deg);
+    }
+    
+    .section-categories {
+        transition: max-height 0.3s ease, opacity 0.3s ease, margin-bottom 0.3s ease;
+        overflow: hidden;
+        max-height: 5000px;
+    }
+    
+    .section-categories.collapsed {
+        max-height: 0 !important;
+        opacity: 0;
+        margin-bottom: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Dashboard</h1>
+    <div>
+        <a href="/section/new" class="btn btn-success me-2">
+            <i class="bi bi-folder-plus"></i> New Section
+        </a>
+        <a href="/category/new" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> New Category
+        </a>
+    </div>
+</div>
+
+<!-- Unassigned Categories (at the top) -->
+{% if unassigned_categories %}
+<div class="mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="fw-bold section-header" style="font-size: 2rem;" onclick="toggleSection('unassigned')">
+            <span class="section-toggle-icon" id="toggle-icon-unassigned">▼</span>
+            My Categories
+        </h2>
+    </div>
+    
+    <div class="section-categories" id="section-categories-unassigned">
+        <div class="row">
+            {% for category in unassigned_categories %}
+            <div class="col-md-4 mb-3">
+                <div class="card h-100 category-card">
+                    <div class="card-body d-flex align-items-center justify-content-center category-card-body color-{{ loop.index0 % 10 }}">
+                        <h3 class="card-title mb-0 text-center" style="font-size: 1.5rem; font-weight: 600;">
+                            <a href="/category/{{ category.id }}" class="text-decoration-none">{{ category.name }}</a>
+                        </h3>
+                    </div>
+                    <div class="card-footer category-card-footer">
+                        <div class="dropdown d-inline">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="moveDropdown{{ category.id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                Move to Section
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="moveDropdown{{ category.id }}">
+                                <li>
+                                    <form method="POST" action="/category/{{ category.id }}/move" class="d-inline">
+                                        <input type="hidden" name="section_id" value="">
+                                        <button type="submit" class="dropdown-item">Unassigned (Top)</button>
+                                    </form>
+                                </li>
+                                {% for section_item in sections_with_categories %}
+                                <li>
+                                    <form method="POST" action="/category/{{ category.id }}/move" class="d-inline">
+                                        <input type="hidden" name="section_id" value="{{ section_item.section.id }}">
+                                        <button type="submit" class="dropdown-item">{{ section_item.section.name }}</button>
+                                    </form>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Sections with Categories -->
+{% if sections_with_categories %}
+{% for section_item in sections_with_categories %}
+<div class="mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="fw-bold section-header" style="font-size: 2rem;">
+            <span class="section-toggle-icon" id="toggle-icon-{{ section_item.section.id }}" onclick="toggleSection({{ section_item.section.id }})" style="cursor: pointer;">▼</span>
+            <span id="section-name-display-{{ section_item.section.id }}" onclick="editSectionName({{ section_item.section.id }}, event)" style="cursor: pointer;" title="Click to edit">
+                {{ section_item.section.name }}
+            </span>
+            <input type="text" id="section-name-input-{{ section_item.section.id }}" value="{{ section_item.section.name }}" class="form-control d-none" style="display: inline-block; width: auto; font-size: inherit; font-weight: inherit; padding: 0.25rem 0.5rem; margin: 0;" onblur="saveSectionName({{ section_item.section.id }})" onkeypress="handleSectionNameKeypress(event, {{ section_item.section.id }})">
+        </h2>
+        <form method="POST" action="/section/{{ section_item.section.id }}/delete" class="d-inline" onsubmit="return confirm('Delete this section? Categories will be moved to unassigned.');">
+            <button type="submit" class="btn btn-sm btn-danger">Delete Section</button>
+        </form>
+    </div>
+    
+    <div class="section-categories" id="section-categories-{{ section_item.section.id }}">
+        {% if section_item.categories %}
+        <div class="row">
+            {% for category in section_item.categories %}
+            <div class="col-md-4 mb-3">
+                <div class="card h-100 category-card">
+                    <div class="card-body d-flex align-items-center justify-content-center category-card-body color-{{ loop.index0 % 10 }}">
+                        <h3 class="card-title mb-0 text-center" style="font-size: 1.5rem; font-weight: 600;">
+                            <a href="/category/{{ category.id }}" class="text-decoration-none">{{ category.name }}</a>
+                        </h3>
+                    </div>
+                    <div class="card-footer category-card-footer">
+                        <div class="dropdown d-inline">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="moveDropdown{{ category.id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                Move to Section
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="moveDropdown{{ category.id }}">
+                                <li>
+                                    <form method="POST" action="/category/{{ category.id }}/move" class="d-inline">
+                                        <input type="hidden" name="section_id" value="">
+                                        <button type="submit" class="dropdown-item">Unassigned (Top)</button>
+                                    </form>
+                                </li>
+                                {% for other_section in sections_with_categories %}
+                                {% if other_section.section.id != section_item.section.id %}
+                                <li>
+                                    <form method="POST" action="/category/{{ category.id }}/move" class="d-inline">
+                                        <input type="hidden" name="section_id" value="{{ other_section.section.id }}">
+                                        <button type="submit" class="dropdown-item">{{ other_section.section.name }}</button>
+                                    </form>
+                                </li>
+                                {% endif %}
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <p class="mb-0">No categories in this section yet. Create a category and move it here.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- Empty state -->
+{% if not unassigned_categories and not sections_with_categories %}
+<div class="alert alert-info">
+    <h4>No categories yet!</h4>
+    <p>Create your first category or section to start organizing your data.</p>
+    <a href="/category/new" class="btn btn-primary">Create Category</a>
+    <a href="/section/new" class="btn btn-success">Create Section</a>
+</div>
+{% endif %}
+
+{% block extra_js %}
+<script>
+function toggleSection(sectionId) {
+    const categoriesDiv = document.getElementById('section-categories-' + sectionId);
+    const toggleIcon = document.getElementById('toggle-icon-' + sectionId);
+    
+    if (categoriesDiv.classList.contains('collapsed')) {
+        categoriesDiv.classList.remove('collapsed');
+        toggleIcon.classList.remove('collapsed');
+    } else {
+        categoriesDiv.classList.add('collapsed');
+        toggleIcon.classList.add('collapsed');
+    }
+}
+
+function editSectionName(sectionId, event) {
+    event.stopPropagation(); // Prevent triggering toggleSection
+    const display = document.getElementById('section-name-display-' + sectionId);
+    const input = document.getElementById('section-name-input-' + sectionId);
+    
+    display.classList.add('d-none');
+    input.classList.remove('d-none');
+    input.focus();
+    input.select();
+}
+
+function saveSectionName(sectionId) {
+    const display = document.getElementById('section-name-display-' + sectionId);
+    const input = document.getElementById('section-name-input-' + sectionId);
+    const newName = input.value.trim();
+    
+    if (!newName) {
+        input.value = display.textContent.trim();
+        input.classList.add('d-none');
+        display.classList.remove('d-none');
+        return;
+    }
+    
+    // Update display immediately
+    display.textContent = newName;
+    display.classList.remove('d-none');
+    input.classList.add('d-none');
+    
+    // Save to server
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/section/${sectionId}/update`;
+    
+    const nameInput = document.createElement('input');
+    nameInput.type = 'hidden';
+    nameInput.name = 'name';
+    nameInput.value = newName;
+    form.appendChild(nameInput);
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function handleSectionNameKeypress(event, sectionId) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        document.getElementById('section-name-input-' + sectionId).blur();
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        const display = document.getElementById('section-name-display-' + sectionId);
+        const input = document.getElementById('section-name-input-' + sectionId);
+        input.value = display.textContent.trim();
+        input.classList.add('d-none');
+        display.classList.remove('d-none');
+    }
+}
+</script>
+{% endblock %}
+{% endblock %}

@@ -1,0 +1,278 @@
+/* Custom styles for Personal Database App */
+
+body {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: none;
+    margin-bottom: 20px;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+}
+
+.btn {
+    border-radius: 4px;
+}
+
+.entity-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.entity-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.tag-badge {
+    display: inline-block;
+    margin: 2px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.filter-section {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.field-item {
+    cursor: move;
+}
+
+.field-item:hover {
+    background-color: #e9ecef !important;
+}
+
+.compare-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.compare-card {
+    background: #ffffff;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.compare-field {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.compare-field:last-child {
+    border-bottom: none;
+}
+
+.field-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.field-value {
+    color: #212529;
+    font-size: 1em;
+}
+
+@media (max-width: 768px) {
+    .compare-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .filter-section .row > div {
+        margin-bottom: 15px;
+    }
+}
+
+/* Loading spinner */
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15em;
+}
+
+/* Image preview */
+.img-thumbnail {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+/* Entity card image container - e-commerce style */
+.entity-image-container {
+    width: 100%;
+    height: 280px;
+    overflow: hidden;
+    background-color: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.entity-card-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.entity-card:hover .entity-card-image {
+    transform: scale(1.05);
+}
+
+.entity-placeholder-image {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #e9ecef;
+    color: #adb5bd;
+}
+
+/* Standardized entity image display for inline views */
+.entity-image {
+    width: 150px;
+    height: 150px;
+    object-fit: cover;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 4px;
+    background-color: #f8f9fa;
+    display: block;
+}
+
+/* Larger images for compare view - more professional appearance */
+.compare-image {
+    width: 100%;
+    max-width: 300px;
+    height: 300px;
+    object-fit: cover;
+    border: none;
+    border-radius: 8px;
+    padding: 0;
+    background-color: transparent;
+    display: block;
+    margin: 0 auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Entity card improvements */
+.entity-card {
+    border: 1px solid #dee2e6;
+    overflow: hidden;
+}
+
+.entity-card .card-body {
+    padding: 1rem;
+}
+
+.entity-fields {
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+/* Form enhancements */
+.form-control:focus,
+.form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Alert enhancements */
+.alert {
+    border-radius: 6px;
+}
+
+/* Badge enhancements */
+.badge {
+    font-weight: 500;
+    padding: 0.35em 0.65em;
+}
+
+/* Image Album Styles */
+.image-album-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.image-album-item {
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.image-album-item:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.image-album-img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 8px;
+    display: block;
+}
+
+.image-album-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.image-album-current {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.image-delete-btn {
+    z-index: 10;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    line-height: 1;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+@media (max-width: 768px) {
+    .image-album-container {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+    }
+    
+    .image-album-img {
+        height: 150px;
+    }
+}
+

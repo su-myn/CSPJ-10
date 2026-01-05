@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}View Entity - {{ category.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mb-4">
+    <div class="col-md-10 col-lg-8">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="mb-0">{{ entity.name }}</h1>
+            <div>
+                <a href="/category/{{ category.id }}/entity/{{ entity.id }}/edit" class="btn btn-primary">Edit</a>
+                <a href="/category/{{ category.id }}" class="btn btn-secondary">Back</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-10 col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                {% if fields %}
+                <h5 class="mb-4">Details</h5>
+                {% for field in fields %}
+                <div class="mb-4">
+                    <label class="form-label fw-bold text-muted" style="font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px;">
+                        {{ field.label }}
+                    </label>
+                    
+                    {% set current_value = field_values.get(field.id, '') %}
+                    
+                    {% if field.field_type == 'text' or field.field_type == 'email' or field.field_type == 'integer' or field.field_type == 'number' %}
+                    <div class="field-value" style="font-size: 1.1em; color: #212529;">
+                        {{ current_value if current_value else '<span class="text-muted">Not set</span>'|safe }}
+                    </div>
+                    
+                    {% elif field.field_type == 'textarea' %}
+                    <div class="field-value" style="font-size: 1.1em; color: #212529; white-space: pre-line; word-wrap: break-word; padding: 0; margin: 0;">
+                        {{ current_value if current_value else '<span class="text-muted">Not set</span>'|safe }}
+                    </div>
+                    
+                    {% elif field.field_type == 'note' %}
+                    <div class="field-value" style="font-size: 1.1em; color: #212529; white-space: pre-line; word-wrap: break-word; padding: 0; margin: 0;">
+                        {{ current_value if current_value else '<span class="text-muted">No notes</span>'|safe }}
+                    </div>
+                    
+                    {% elif field.field_type == 'datetime' %}
+                    <div class="field-value" style="font-size: 1.1em; color: #212529;">
+                        {{ current_value if current_value else '<span class="text-muted">Not set</span>'|safe }}
+                    </div>
+                    
+                    {% elif field.field_type == 'select' or field.field_type == 'radio' %}
+                    <div class="field-value" style="font-size: 1.1em; color: #212529;">
+                        {{ current_value if current_value else '<span class="text-muted">Not set</span>'|safe }}
+                    </div>
+                    
+                    {% elif field.field_type == 'checkbox' %}
+                    <div class="field-value" style="font-size: 1.1em; color: #212529;">
+                        {% if current_value == 'Yes' %}
+                        <span class="badge bg-success">Yes</span>
+                        {% else %}
+                        <span class="text-muted">No</span>
+                        {% endif %}
+                    </div>
+                    
+                    {% elif field.field_type == 'checkbox_list' %}
+                    <div class="field-value" style="font-size: 1.1em; color: #212529;">
+                        {% if current_value %}
+                        {% set selected_values = current_value.split(',') %}
+                        {% for val in selected_values %}
+                        {% if val.strip() %}
+                        <span class="badge bg-primary me-2">{{ val.strip() }}</span>
+                        {% endif %}
+                        {% endfor %}
+                        {% if not selected_values or selected_values|join('')|trim == '' %}
+                        <span class="text-muted">No selections</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted">No selections</span>
+                        {% endif %}
+                    </div>
+                    
+                    {% elif field.field_type == 'image' %}
+                    <div class="field-value text-center">
+                        {% if current_value %}
+                        <img src="{{ url_for('static', filename='uploads/' + current_value) }}" alt="{{ field.label }}" class="img-fluid rounded" style="max-width: 100%; max-height: 600px; object-fit: contain;">
+                        {% else %}
+                        <span class="text-muted">No image</span>
+                        {% endif %}
+                    </div>
+                    
+                    {% elif field.field_type == 'image_album' %}
+                    <div class="field-value">
+                        {% if current_value %}
+                        {% set image_list = current_value|from_json if current_value else [] %}
+                        {% if image_list %}
+                        <div class="image-album-container">
+                            {% for img_filename in image_list %}
+                            <div class="image-album-item">
+                                <img src="{{ url_for('static', filename='uploads/' + img_filename) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" onclick="showImageModal('{{ url_for('static', filename='uploads/' + img_filename) }}')">
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span class="text-muted">No images</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted">No images</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                <hr>
+                {% endfor %}
+                {% endif %}
+                
+                {% if tags %}
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-muted" style="font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px;">Tags</label>
+                    <div>
+                        {% for tag in tags %}
+                        <span class="badge me-2" style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}; padding: 6px 12px; font-size: 0.9em;">
+                            {{ tag.name }}
+                        </span>
+                        {% endfor %}
+                        {% if not tags %}
+                        <span class="text-muted">No tags</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Image Modal -->
+<div class="modal fade" id="imageModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Image</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalImage" src="" alt="Image" class="img-fluid">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showImageModal(imageSrc) {
+    document.getElementById('modalImage').src = imageSrc;
+}
+</script>
+{% endblock %}
+

@@ -1,0 +1,423 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.name }} - Personal Database{% endblock %}
+
+{% block extra_css %}
+<style>
+    .entity-card {
+        transition: transform 0.2s;
+    }
+    .entity-card:hover {
+        transform: translateY(-5px);
+    }
+    .tag-badge {
+        display: inline-block;
+        margin: 2px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.85em;
+    }
+    .filter-section {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>
+        <span id="category-name-display" onclick="editCategoryName()" style="cursor: pointer;" title="Click to edit">
+            {{ category.name }}
+        </span>
+        <input type="text" id="category-name-input" value="{{ category.name }}" class="form-control d-none" style="display: inline-block; width: auto; font-size: inherit; font-weight: inherit; padding: 0.25rem 0.5rem; margin: 0;" onblur="saveCategoryName()" onkeypress="handleCategoryNameKeypress(event)">
+    </h1>
+    <div>
+        <a href="/category/{{ category.id }}/entity/new" class="btn btn-primary">Add Entity</a>
+        <a href="/category/{{ category.id }}/fields" class="btn btn-secondary">Manage Fields</a>
+        <a href="/category/{{ category.id }}/tags" class="btn btn-info">Manage Tags</a>
+        <form method="POST" action="/category/{{ category.id }}/delete" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this category? All entities, fields, and data will be permanently deleted.');">
+            <button type="submit" class="btn btn-danger">Delete Category</button>
+        </form>
+        <a href="/dashboard" class="btn btn-outline-secondary">Back</a>
+    </div>
+</div>
+
+<!-- Filter and Sort Section -->
+<div class="filter-section">
+    <div class="row mb-3">
+        <div class="col-12">
+            <button type="button" class="btn btn-sm btn-outline-primary" id="toggleFilterBtn" onclick="toggleTagFilter()">
+                <i class="bi bi-funnel"></i> Show Filter
+            </button>
+        </div>
+    </div>
+    <div class="d-flex flex-wrap gap-3 align-items-start d-none" id="tagFilterRow">
+        <div style="flex: 0 0 auto; min-width: 200px; max-width: 300px;">
+            <label class="form-label">Filter by Tags (select multiple):</label>
+            <div class="tag-filter-container" style="max-height: 150px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; background: white;">
+                {% if all_tags %}
+                    {% for tag in all_tags %}
+                    <div class="form-check">
+                        <input class="form-check-input tag-filter-checkbox" type="checkbox" value="{{ tag.id }}" id="tag_{{ tag.id }}" onchange="filterEntities()">
+                        <label class="form-check-label" for="tag_{{ tag.id }}" style="cursor: pointer;">
+                            <span class="badge" style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}; padding: 4px 8px;">
+                                {{ tag.name }}
+                            </span>
+                        </label>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted small mb-0">No tags available. <a href="/category/{{ category.id }}/tags">Create tags</a> to filter entities.</p>
+                {% endif %}
+            </div>
+            <button type="button" class="btn btn-sm btn-link mt-2 p-0" onclick="clearTagFilters()">Clear all filters</button>
+        </div>
+        <div style="flex: 0 0 auto; min-width: 150px;">
+            <label for="sortBy" class="form-label">Sort By:</label>
+            <select class="form-select form-select-sm" id="sortBy" onchange="filterEntities()">
+                <option value="name">Name</option>
+                <option value="created_at">Date Created</option>
+                <option value="updated_at">Last Updated</option>
+            </select>
+        </div>
+        <div style="flex: 0 0 auto; min-width: 150px;">
+            <label for="sortOrder" class="form-label">Order:</label>
+            <select class="form-select form-select-sm" id="sortOrder" onchange="filterEntities()">
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Compare Section -->
+<div class="mb-3">
+    <button class="btn btn-info" onclick="enableCompareMode()">Compare Mode</button>
+    <button class="btn btn-success d-none" id="compareBtn" onclick="compareSelected()">Compare Selected (<span id="selectedCount">0</span>)</button>
+    <button class="btn btn-secondary d-none" id="cancelCompareBtn" onclick="cancelCompareMode()">Cancel</button>
+    <small class="text-muted ms-2 d-none" id="compareHint">Select 1-4 entities to compare</small>
+</div>
+
+<div id="entitiesContainer" class="row">
+    <!-- DEBUG: entities_with_tags count = {{ entities_with_tags|length }} -->
+    {% for item in entities_with_tags %}
+    <!-- DEBUG: item.entity = {{ item.entity }} -->
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-4 entity-item" data-entity-id="{{ item.entity.id }}">
+        <div class="card entity-card h-100">
+            <div class="form-check compare-checkbox d-none position-absolute" style="top: 10px; left: 10px; z-index: 10; background: rgba(255,255,255,0.9); padding: 5px; border-radius: 4px;">
+                <input class="form-check-input" type="checkbox" value="{{ item.entity.id }}" id="compare_{{ item.entity.id }}">
+                <label class="form-check-label" for="compare_{{ item.entity.id }}">Select</label>
+            </div>
+            
+            <!-- Image Section - Display primary image if available -->
+            {% if item.primary_image %}
+                <a href="/category/{{ category.id }}/entity/{{ item.entity.id }}" style="text-decoration: none; display: block;">
+                    <div class="entity-image-container" style="cursor: pointer;">
+                        <img src="{{ url_for('static', filename='uploads/' + item.primary_image) }}" alt="{{ item.entity.name }}" class="entity-card-image">
+                    </div>
+                </a>
+            {% else %}
+                <a href="/category/{{ category.id }}/entity/{{ item.entity.id }}" style="text-decoration: none; display: block;">
+                    <div class="entity-image-container" style="cursor: pointer;">
+                        <div class="entity-placeholder-image">
+                            <i class="bi bi-image" style="font-size: 3rem; color: #dee2e6;"></i>
+                        </div>
+                    </div>
+                </a>
+            {% endif %}
+            
+            <div class="card-body">
+                <h5 class="card-title mb-2">{{ item.entity.name }}</h5>
+                
+                <!-- Tags -->
+                {% if item.tags %}
+                <div class="mb-2">
+                    {% for tag in item.tags %}
+                    <span class="tag-badge" style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}">
+                        {{ tag.name }}
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <!-- Other Fields (non-image) -->
+                {% if fields %}
+                <div class="entity-fields small text-muted">
+                    {% for field in fields %}
+                        {% if field.field_type != 'image' and field.field_type != 'image_album' %}
+                            {% set value = item.field_values.get(field.id, '') if item.field_values else '' %}
+                            {% if value %}
+                            <div class="mb-1"><strong>{{ field.label }}:</strong> 
+                                {% if value|length > 30 %}
+                                {{ value[:30] }}...
+                                {% else %}
+                                {{ value }}
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="card-footer bg-transparent border-top-0">
+                <div class="d-grid gap-2">
+                    <a href="/category/{{ category.id }}/entity/{{ item.entity.id }}/edit" class="btn btn-sm btn-primary">Edit</a>
+                    <form method="POST" action="/category/{{ category.id }}/entity/{{ item.entity.id }}/delete" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this entity?');">
+                        <button type="submit" class="btn btn-sm btn-danger w-100">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if entities_with_tags|length == 0 %}
+<div class="alert alert-info">
+    <h4>No entities yet!</h4>
+    <p>Add your first entity to this category.</p>
+    <a href="/category/{{ category.id }}/entity/new" class="btn btn-primary">Add Entity</a>
+</div>
+{% endif %}
+
+<script>
+let compareMode = false;
+const categoryId = {{ category.id }};
+let pageLoaded = false;
+
+// Prevent filterEntities from running on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Small delay to ensure page is fully loaded
+    setTimeout(function() {
+        pageLoaded = true;
+    }, 100);
+});
+
+function enableCompareMode() {
+    compareMode = true;
+    document.querySelectorAll('.compare-checkbox').forEach(cb => cb.classList.remove('d-none'));
+    document.getElementById('compareBtn').classList.remove('d-none');
+    document.getElementById('cancelCompareBtn').classList.remove('d-none');
+    document.getElementById('compareHint').classList.remove('d-none');
+    updateSelectedCount();
+    
+    // Add event listeners to checkboxes to update count
+    document.querySelectorAll('.compare-checkbox input').forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+}
+
+function updateSelectedCount() {
+    const checked = document.querySelectorAll('.compare-checkbox input:checked').length;
+    document.getElementById('selectedCount').textContent = checked;
+    const compareBtn = document.getElementById('compareBtn');
+    if (checked >= 1 && checked <= 4) {
+        compareBtn.disabled = false;
+        compareBtn.classList.remove('btn-secondary');
+        compareBtn.classList.add('btn-success');
+    } else {
+        compareBtn.disabled = true;
+        compareBtn.classList.remove('btn-success');
+        compareBtn.classList.add('btn-secondary');
+    }
+}
+
+function cancelCompareMode() {
+    compareMode = false;
+    document.querySelectorAll('.compare-checkbox').forEach(cb => {
+        cb.classList.add('d-none');
+        cb.querySelector('input').checked = false;
+    });
+    document.getElementById('compareBtn').classList.add('d-none');
+    document.getElementById('cancelCompareBtn').classList.add('d-none');
+    document.getElementById('compareHint').classList.add('d-none');
+    
+    // Remove event listeners
+    document.querySelectorAll('.compare-checkbox input').forEach(cb => {
+        cb.removeEventListener('change', updateSelectedCount);
+    });
+}
+
+function compareSelected() {
+    const checked = Array.from(document.querySelectorAll('.compare-checkbox input:checked'));
+    if (checked.length < 1 || checked.length > 4) {
+        alert('Please select 1 to 4 entities to compare');
+        return;
+    }
+    // Build query string with entity IDs
+    const params = checked.map((cb, index) => `entity${index + 1}=${cb.value}`).join('&');
+    window.location.href = `/category/${categoryId}/compare?${params}`;
+}
+
+function toggleTagFilter() {
+    const filterRow = document.getElementById('tagFilterRow');
+    const toggleBtn = document.getElementById('toggleFilterBtn');
+    
+    if (!filterRow || !toggleBtn) {
+        console.error('Filter elements not found');
+        return;
+    }
+    
+    if (filterRow.classList.contains('d-none')) {
+        filterRow.classList.remove('d-none');
+        toggleBtn.innerHTML = '<i class="bi bi-funnel-fill"></i> Hide Filter';
+    } else {
+        filterRow.classList.add('d-none');
+        toggleBtn.innerHTML = '<i class="bi bi-funnel"></i> Show Filter';
+    }
+}
+
+function clearTagFilters() {
+    document.querySelectorAll('.tag-filter-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    filterEntities();
+}
+
+function filterEntities() {
+    // Don't run on initial page load - only when user explicitly changes filters
+    if (!pageLoaded) {
+        return;
+    }
+    
+    // Get all checked tag IDs
+    const checkedTags = Array.from(document.querySelectorAll('.tag-filter-checkbox:checked'))
+        .map(cb => cb.value);
+    const tagFilter = checkedTags.length > 0 ? checkedTags.join(',') : '';
+    const sortBy = document.getElementById('sortBy').value;
+    const sortOrder = document.getElementById('sortOrder').value;
+    
+    fetch(`/api/category/${categoryId}/entities?tags=${tagFilter}&sort=${sortBy}&order=${sortOrder}`)
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('entitiesContainer');
+            container.innerHTML = '';
+            
+            if (data.length === 0) {
+                container.innerHTML = '<div class="col-12"><div class="alert alert-info">No entities found matching the filter.</div></div>';
+                return;
+            }
+            
+            data.forEach(item => {
+                const tagsHtml = item.tags.map(tag => 
+                    `<span class="tag-badge" style="background-color: ${tag.color}20; color: ${tag.color}; border: 1px solid ${tag.color}">${tag.name}</span>`
+                ).join('');
+                
+                // Generate image HTML - show image if available, otherwise placeholder
+                let imageHtml = '';
+                if (item.primary_image) {
+                    imageHtml = `<a href="/category/${categoryId}/entity/${item.id}" style="text-decoration: none; display: block;">
+                        <div class="entity-image-container" style="cursor: pointer;">
+                            <img src="/static/uploads/${item.primary_image}" alt="${item.name}" class="entity-card-image">
+                        </div>
+                    </a>`;
+                } else {
+                    imageHtml = `<a href="/category/${categoryId}/entity/${item.id}" style="text-decoration: none; display: block;">
+                        <div class="entity-image-container" style="cursor: pointer;">
+                            <div class="entity-placeholder-image">
+                                <i class="bi bi-image" style="font-size: 3rem; color: #dee2e6;"></i>
+                            </div>
+                        </div>
+                    </a>`;
+                }
+                
+                const card = `
+                    <div class="col-lg-3 col-md-4 col-sm-6 mb-4 entity-item" data-entity-id="${item.id}">
+                        <div class="card entity-card h-100">
+                            <div class="form-check compare-checkbox ${compareMode ? '' : 'd-none'} position-absolute" style="top: 10px; left: 10px; z-index: 10; background: rgba(255,255,255,0.9); padding: 5px; border-radius: 4px;">
+                                <input class="form-check-input" type="checkbox" value="${item.id}" id="compare_${item.id}" onchange="updateSelectedCount()">
+                                <label class="form-check-label" for="compare_${item.id}">Select</label>
+                            </div>
+                            ${imageHtml}
+                            <div class="card-body">
+                                <h5 class="card-title mb-2">${item.name}</h5>
+                                <div class="mb-2">${tagsHtml}</div>
+                            </div>
+                            <div class="card-footer bg-transparent border-top-0">
+                                <div class="d-grid gap-2">
+                                    <a href="/category/${categoryId}/entity/${item.id}/edit" class="btn btn-sm btn-primary">Edit</a>
+                                    <form method="POST" action="/category/${categoryId}/entity/${item.id}/delete" class="d-inline" onsubmit="return confirm('Are you sure?');">
+                                        <button type="submit" class="btn btn-sm btn-danger w-100">Delete</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += card;
+            });
+            
+            // Update selected count after filtering if in compare mode
+            if (compareMode) {
+                updateSelectedCount();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error filtering entities');
+        });
+}
+
+function editCategoryName() {
+    const display = document.getElementById('category-name-display');
+    const input = document.getElementById('category-name-input');
+    
+    display.classList.add('d-none');
+    input.classList.remove('d-none');
+    input.focus();
+    input.select();
+}
+
+function saveCategoryName() {
+    const display = document.getElementById('category-name-display');
+    const input = document.getElementById('category-name-input');
+    const newName = input.value.trim();
+    
+    if (!newName) {
+        input.value = display.textContent.trim();
+        input.classList.add('d-none');
+        display.classList.remove('d-none');
+        return;
+    }
+    
+    // Update display immediately
+    display.textContent = newName;
+    display.classList.remove('d-none');
+    input.classList.add('d-none');
+    
+    // Save to server
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/category/{{ category.id }}/update`;
+    
+    const nameInput = document.createElement('input');
+    nameInput.type = 'hidden';
+    nameInput.name = 'name';
+    nameInput.value = newName;
+    form.appendChild(nameInput);
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function handleCategoryNameKeypress(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        document.getElementById('category-name-input').blur();
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        const display = document.getElementById('category-name-display');
+        const input = document.getElementById('category-name-input');
+        input.value = display.textContent.trim();
+        input.classList.add('d-none');
+        display.classList.remove('d-none');
+    }
+}
+</script>
+{% endblock %}
+
