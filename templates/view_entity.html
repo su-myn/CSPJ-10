@@ -83,7 +83,7 @@
                     {% elif field.field_type == 'image' %}
                     <div class="field-value text-center">
                         {% if current_value %}
-                        <img src="{{ url_for('static', filename='uploads/' + current_value) }}" alt="{{ field.label }}" class="img-fluid rounded" style="max-width: 100%; max-height: 600px; object-fit: contain;">
+                        <img src="{{ url_for('static', filename='uploads/' + current_value) }}" alt="{{ field.label }}" class="img-fluid rounded" style="max-width: 100%; max-height: 600px; object-fit: contain;" loading="lazy">
                         {% else %}
                         <span class="text-muted">No image</span>
                         {% endif %}
@@ -94,10 +94,10 @@
                         {% if current_value %}
                         {% set image_list = current_value|from_json if current_value else [] %}
                         {% if image_list %}
-                        <div class="image-album-container">
+                        <div class="image-album-container" data-album-images='{{ image_list|tojson }}'>
                             {% for img_filename in image_list %}
                             <div class="image-album-item">
-                                <img src="{{ url_for('static', filename='uploads/' + img_filename) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" onclick="showImageModal('{{ url_for('static', filename='uploads/' + img_filename) }}')">
+                                <img src="{{ img_filename|thumbnail_url(100) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + img_filename) }}" data-image-index="{{ loop.index0 }}" onclick="showImageModal(this)" loading="lazy">
                             </div>
                             {% endfor %}
                         </div>
@@ -106,6 +106,28 @@
                         {% endif %}
                         {% else %}
                         <span class="text-muted">No images</span>
+                        {% endif %}
+                    </div>
+                    
+                    {% elif field.field_type == 'video_embed' %}
+                    <div class="field-value">
+                        {% if current_value %}
+                        {% set video_list = current_value|from_json if current_value else [] %}
+                        {% if video_list %}
+                        <div class="video-embed-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px;">
+                            {% for embed_url in video_list %}
+                            <div class="video-embed-item" style="position: relative;">
+                                <div class="ratio ratio-16x9">
+                                    <iframe src="{{ embed_url }}" allowfullscreen frameborder="0" style="width: 100%; height: 100%;"></iframe>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span class="text-muted">No videos</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted">No videos</span>
                         {% endif %}
                     </div>
                     {% endif %}
@@ -139,20 +161,150 @@
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Image</h5>
+                <h5 class="modal-title" id="modalImageTitle">Image</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body text-center">
-                <img id="modalImage" src="" alt="Image" class="img-fluid">
+            <div class="modal-body text-center position-relative" style="min-height: 400px;">
+                <button type="button" class="btn btn-outline-light position-absolute start-0 top-50 translate-middle-y ms-2" id="prevImageBtn" style="z-index: 10; display: none;" onclick="navigateImage(-1)">
+                    <i class="bi bi-chevron-left" style="font-size: 2rem;"></i>
+                </button>
+                <img id="modalImage" src="" alt="Image" class="img-fluid" style="max-height: 70vh;">
+                <button type="button" class="btn btn-outline-light position-absolute end-0 top-50 translate-middle-y me-2" id="nextImageBtn" style="z-index: 10; display: none;" onclick="navigateImage(1)">
+                    <i class="bi bi-chevron-right" style="font-size: 2rem;"></i>
+                </button>
             </div>
         </div>
     </div>
 </div>
 
+{% block extra_css %}
+<style>
+    /* Image modal navigation buttons */
+    #prevImageBtn, #nextImageBtn {
+        background-color: rgba(0, 0, 0, 0.5);
+        border: 2px solid rgba(255, 255, 255, 0.8);
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+    #prevImageBtn:hover, #nextImageBtn:hover {
+        background-color: rgba(0, 0, 0, 0.7);
+        border-color: rgba(255, 255, 255, 1);
+        transform: scale(1.1);
+    }
+    #prevImageBtn i, #nextImageBtn i {
+        color: white;
+    }
+</style>
+{% endblock %}
+
 <script>
-function showImageModal(imageSrc) {
-    document.getElementById('modalImage').src = imageSrc;
+// Image modal navigation variables
+let currentImageList = [];
+let currentImageIndex = 0;
+
+// Image modal function
+function showImageModal(imgElement) {
+    const imageSrc = imgElement.getAttribute('data-image-src');
+    const imageIndex = parseInt(imgElement.getAttribute('data-image-index'));
+    
+    // Find the album container and get all images
+    const albumContainer = imgElement.closest('.image-album-container');
+    if (albumContainer) {
+        const albumImagesJson = albumContainer.getAttribute('data-album-images');
+        if (albumImagesJson) {
+            try {
+                currentImageList = JSON.parse(albumImagesJson);
+                currentImageIndex = imageIndex;
+                
+                // Convert to full URLs
+                currentImageList = currentImageList.map(filename => 
+                    '/static/uploads/' + filename
+                );
+                
+                updateModalImage();
+            } catch (e) {
+                console.error('Error parsing album images:', e);
+                // Fallback to single image
+                currentImageList = [imageSrc];
+                currentImageIndex = 0;
+                updateModalImage();
+            }
+        } else {
+            // Fallback if no album data
+            currentImageList = [imageSrc];
+            currentImageIndex = 0;
+            updateModalImage();
+        }
+    } else {
+        // Fallback if no container found
+        currentImageList = [imageSrc];
+        currentImageIndex = 0;
+        updateModalImage();
+    }
 }
+
+// Update modal image display
+function updateModalImage() {
+    const modalImage = document.getElementById('modalImage');
+    const modalTitle = document.getElementById('modalImageTitle');
+    const prevBtn = document.getElementById('prevImageBtn');
+    const nextBtn = document.getElementById('nextImageBtn');
+    
+    if (currentImageList.length > 0 && currentImageIndex >= 0 && currentImageIndex < currentImageList.length) {
+        modalImage.src = currentImageList[currentImageIndex];
+        modalTitle.textContent = `Image ${currentImageIndex + 1} of ${currentImageList.length}`;
+        
+        // Show/hide navigation buttons
+        if (currentImageList.length > 1) {
+            prevBtn.style.display = currentImageIndex > 0 ? 'block' : 'none';
+            nextBtn.style.display = currentImageIndex < currentImageList.length - 1 ? 'block' : 'none';
+        } else {
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'none';
+        }
+    }
+}
+
+// Navigate to previous/next image
+function navigateImage(direction) {
+    if (currentImageList.length === 0) return;
+    
+    currentImageIndex += direction;
+    
+    // Don't wrap, just clamp
+    if (currentImageIndex < 0) {
+        currentImageIndex = 0;
+    } else if (currentImageIndex >= currentImageList.length) {
+        currentImageIndex = currentImageList.length - 1;
+    }
+    
+    updateModalImage();
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+    const modal = document.getElementById('imageModal');
+    if (modal && modal.classList.contains('show')) {
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            navigateImage(-1);
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            navigateImage(1);
+        } else if (e.key === 'Escape') {
+            // Bootstrap modal handles Escape by default, but we can ensure it works
+            const bsModal = bootstrap.Modal.getInstance(modal);
+            if (bsModal) {
+                bsModal.hide();
+            }
+        }
+    }
+});
 </script>
 {% endblock %}
 

@@ -23,6 +23,25 @@
         border-radius: 8px;
         margin-bottom: 20px;
     }
+    .entity-item.draggable {
+        cursor: grab;
+    }
+    .entity-item.draggable:active {
+        cursor: grabbing;
+    }
+    .entity-item.dragging {
+        opacity: 0.5;
+    }
+    .entity-item.drop-target {
+        border: 3px dotted #4a6cf7;
+    }
+    /* Custom 5-column layout for large screens */
+    @media (min-width: 992px) {
+        #entitiesContainer .col-lg {
+            flex: 0 0 20%;
+            max-width: 20%;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -35,26 +54,20 @@
         <input type="text" id="category-name-input" value="{{ category.name }}" class="form-control d-none" style="display: inline-block; width: auto; font-size: inherit; font-weight: inherit; padding: 0.25rem 0.5rem; margin: 0;" onblur="saveCategoryName()" onkeypress="handleCategoryNameKeypress(event)">
     </h1>
     <div>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="toggleFilterBtn" onclick="toggleTagFilter()">
+            <i class="bi bi-funnel"></i> Show Filter
+        </button>
         <a href="/category/{{ category.id }}/entity/new" class="btn btn-primary">Add Entity</a>
         <a href="/category/{{ category.id }}/fields" class="btn btn-secondary">Manage Fields</a>
         <a href="/category/{{ category.id }}/tags" class="btn btn-info">Manage Tags</a>
-        <form method="POST" action="/category/{{ category.id }}/delete" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this category? All entities, fields, and data will be permanently deleted.');">
-            <button type="submit" class="btn btn-danger">Delete Category</button>
-        </form>
+        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteCategoryModal">Delete Category</button>
         <a href="/dashboard" class="btn btn-outline-secondary">Back</a>
     </div>
 </div>
 
 <!-- Filter and Sort Section -->
-<div class="filter-section">
-    <div class="row mb-3">
-        <div class="col-12">
-            <button type="button" class="btn btn-sm btn-outline-primary" id="toggleFilterBtn" onclick="toggleTagFilter()">
-                <i class="bi bi-funnel"></i> Show Filter
-            </button>
-        </div>
-    </div>
-    <div class="d-flex flex-wrap gap-3 align-items-start d-none" id="tagFilterRow">
+<div class="filter-section d-none" id="filterSection">
+    <div class="d-flex flex-wrap gap-3 align-items-start" id="tagFilterRow">
         <div style="flex: 0 0 auto; min-width: 200px; max-width: 300px;">
             <label class="form-label">Filter by Tags (select multiple):</label>
             <div class="tag-filter-container" style="max-height: 150px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; background: white;">
@@ -78,6 +91,7 @@
         <div style="flex: 0 0 auto; min-width: 150px;">
             <label for="sortBy" class="form-label">Sort By:</label>
             <select class="form-select form-select-sm" id="sortBy" onchange="filterEntities()">
+                <option value="display_order">Display Order</option>
                 <option value="name">Name</option>
                 <option value="created_at">Date Created</option>
                 <option value="updated_at">Last Updated</option>
@@ -101,11 +115,11 @@
     <small class="text-muted ms-2 d-none" id="compareHint">Select 1-4 entities to compare</small>
 </div>
 
-<div id="entitiesContainer" class="row">
+<div id="entitiesContainer" class="row entity-drop-zone">
     <!-- DEBUG: entities_with_tags count = {{ entities_with_tags|length }} -->
     {% for item in entities_with_tags %}
     <!-- DEBUG: item.entity = {{ item.entity }} -->
-    <div class="col-lg-3 col-md-4 col-sm-6 mb-4 entity-item" data-entity-id="{{ item.entity.id }}">
+    <div class="col-lg col-md-4 col-sm-6 mb-4 entity-item draggable" draggable="true" data-entity-id="{{ item.entity.id }}" data-entity-name="{{ item.entity.name|e }}" data-tag-count="{{ item.tags|length }}">
         <div class="card entity-card h-100">
             <div class="form-check compare-checkbox d-none position-absolute" style="top: 10px; left: 10px; z-index: 10; background: rgba(255,255,255,0.9); padding: 5px; border-radius: 4px;">
                 <input class="form-check-input" type="checkbox" value="{{ item.entity.id }}" id="compare_{{ item.entity.id }}">
@@ -116,7 +130,7 @@
             {% if item.primary_image %}
                 <a href="/category/{{ category.id }}/entity/{{ item.entity.id }}" style="text-decoration: none; display: block;">
                     <div class="entity-image-container" style="cursor: pointer;">
-                        <img src="{{ url_for('static', filename='uploads/' + item.primary_image) }}" alt="{{ item.entity.name }}" class="entity-card-image">
+                        <img src="{{ item.primary_image|thumbnail_url(500) }}" alt="{{ item.entity.name }}" class="entity-card-image" loading="lazy">
                     </div>
                 </a>
             {% else %}
@@ -131,17 +145,6 @@
             
             <div class="card-body">
                 <h5 class="card-title mb-2">{{ item.entity.name }}</h5>
-                
-                <!-- Tags -->
-                {% if item.tags %}
-                <div class="mb-2">
-                    {% for tag in item.tags %}
-                    <span class="tag-badge" style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}">
-                        {{ tag.name }}
-                    </span>
-                    {% endfor %}
-                </div>
-                {% endif %}
                 
                 <!-- Other Fields (non-image) -->
                 {% if fields %}
@@ -167,9 +170,7 @@
             <div class="card-footer bg-transparent border-top-0">
                 <div class="d-grid gap-2">
                     <a href="/category/{{ category.id }}/entity/{{ item.entity.id }}/edit" class="btn btn-sm btn-primary">Edit</a>
-                    <form method="POST" action="/category/{{ category.id }}/entity/{{ item.entity.id }}/delete" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this entity?');">
-                        <button type="submit" class="btn btn-sm btn-danger w-100">Delete</button>
-                    </form>
+                    <button type="button" class="btn btn-sm btn-danger w-100" onclick="openDeleteEntityModal(this)">Delete</button>
                 </div>
             </div>
         </div>
@@ -185,10 +186,189 @@
 </div>
 {% endif %}
 
+<!-- Delete Category Confirmation Modal -->
+<div class="modal fade" id="deleteCategoryModal" tabindex="-1" aria-labelledby="deleteCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="/category/{{ category.id }}/delete" id="deleteCategoryForm">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteCategoryModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Delete Category
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="fw-bold text-danger mb-3">This action cannot be undone. The following will be permanently deleted:</p>
+                    <ul class="list-group mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-collection me-2"></i>All entities in this category</span>
+                            <span class="badge bg-danger rounded-pill">{{ entities_with_tags|length }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-list-ul me-2"></i>All custom fields</span>
+                            <span class="badge bg-danger rounded-pill">{{ fields|length }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-tags me-2"></i>All tags</span>
+                            <span class="badge bg-danger rounded-pill">{{ all_tags|length }}</span>
+                        </li>
+                        <li class="list-group-item">
+                            <span><i class="bi bi-images me-2"></i>All uploaded images and files</span>
+                        </li>
+                        <li class="list-group-item">
+                            <span><i class="bi bi-database me-2"></i>All field values and entity data</span>
+                        </li>
+                    </ul>
+                    <p class="mb-2">To confirm, type <strong>{{ category.name }}</strong> below:</p>
+                    <input type="text" id="deleteCategoryConfirmInput" name="confirm_name" class="form-control" placeholder="Type category name to confirm" autocomplete="off">
+                    <div class="invalid-feedback" id="deleteCategoryConfirmError">The name must match exactly.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger" id="deleteCategoryConfirmBtn" disabled>
+                        <i class="bi bi-trash"></i> Delete Permanently
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Entity Confirmation Modal -->
+<div class="modal fade" id="deleteEntityModal" tabindex="-1" aria-labelledby="deleteEntityModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="deleteEntityForm">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteEntityModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Delete Entity
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="fw-bold text-danger mb-3">This action cannot be undone. The following will be permanently deleted:</p>
+                    <ul class="list-group mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-box me-2"></i>Entity: <strong id="deleteEntityNameDisplay"></strong></span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-tags me-2"></i>All tags assigned to this entity</span>
+                            <span class="badge bg-danger rounded-pill" id="deleteEntityTagCount">0</span>
+                        </li>
+                        <li class="list-group-item">
+                            <span><i class="bi bi-list-ul me-2"></i>All field values and custom data</span>
+                        </li>
+                        <li class="list-group-item">
+                            <span><i class="bi bi-images me-2"></i>All uploaded images and files</span>
+                        </li>
+                    </ul>
+                    <p class="mb-2">To confirm, type <strong id="deleteEntityNameConfirm"></strong> below:</p>
+                    <input type="text" id="deleteEntityConfirmInput" name="confirm_name" class="form-control" placeholder="Type entity name to confirm" autocomplete="off">
+                    <div class="invalid-feedback" id="deleteEntityConfirmError">The name must match exactly.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger" id="deleteEntityConfirmBtn" disabled>
+                        <i class="bi bi-trash"></i> Delete Permanently
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 let compareMode = false;
 const categoryId = {{ category.id }};
+const categoryNameToConfirm = {{ category.name|tojson }};
 let pageLoaded = false;
+
+// Delete category confirmation - enable button when name matches
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('deleteCategoryModal');
+    const confirmInput = document.getElementById('deleteCategoryConfirmInput');
+    const confirmBtn = document.getElementById('deleteCategoryConfirmBtn');
+    const confirmError = document.getElementById('deleteCategoryConfirmError');
+    
+    if (modal && confirmInput && confirmBtn) {
+        confirmInput.addEventListener('input', function() {
+            const matches = confirmInput.value.trim() === categoryNameToConfirm;
+            confirmBtn.disabled = !matches;
+            confirmInput.classList.toggle('is-invalid', confirmInput.value.trim() !== '' && !matches);
+            confirmError.style.display = matches || confirmInput.value.trim() === '' ? 'none' : 'block';
+        });
+        
+        modal.addEventListener('show.bs.modal', function() {
+            confirmInput.value = '';
+            confirmBtn.disabled = true;
+            confirmInput.classList.remove('is-invalid');
+            confirmError.style.display = 'none';
+        });
+        
+        document.getElementById('deleteCategoryForm').addEventListener('submit', function(e) {
+            if (confirmInput.value.trim() !== categoryNameToConfirm) {
+                e.preventDefault();
+                confirmInput.classList.add('is-invalid');
+                confirmError.style.display = 'block';
+            }
+        });
+    }
+});
+
+function openDeleteEntityModal(btn) {
+    const entityItem = btn.closest('.entity-item');
+    if (!entityItem) return;
+    const entityId = entityItem.dataset.entityId;
+    const entityName = entityItem.dataset.entityName || '';
+    const tagCount = entityItem.dataset.tagCount || '0';
+    
+    const form = document.getElementById('deleteEntityForm');
+    form.action = '/category/' + categoryId + '/entity/' + entityId + '/delete';
+    
+    document.getElementById('deleteEntityNameDisplay').textContent = entityName;
+    document.getElementById('deleteEntityNameConfirm').textContent = entityName;
+    document.getElementById('deleteEntityTagCount').textContent = tagCount;
+    
+    const confirmInput = document.getElementById('deleteEntityConfirmInput');
+    const confirmBtn = document.getElementById('deleteEntityConfirmBtn');
+    const confirmError = document.getElementById('deleteEntityConfirmError');
+    
+    confirmInput.value = '';
+    confirmBtn.disabled = true;
+    confirmInput.classList.remove('is-invalid');
+    confirmError.style.display = 'none';
+    
+    const modal = new bootstrap.Modal(document.getElementById('deleteEntityModal'));
+    modal.show();
+    
+    const checkMatch = function() {
+        const matches = confirmInput.value.trim() === entityName;
+        confirmBtn.disabled = !matches;
+        confirmInput.classList.toggle('is-invalid', confirmInput.value.trim() !== '' && !matches);
+        confirmError.style.display = matches || confirmInput.value.trim() === '' ? 'none' : 'block';
+    };
+    
+    confirmInput.oninput = checkMatch;
+    form.onsubmit = function(e) {
+        if (confirmInput.value.trim() !== entityName) {
+            e.preventDefault();
+            confirmInput.classList.add('is-invalid');
+            confirmError.style.display = 'block';
+        }
+    };
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteEntityModal = document.getElementById('deleteEntityModal');
+    if (deleteEntityModal) {
+        deleteEntityModal.addEventListener('show.bs.modal', function() {
+            document.getElementById('deleteEntityConfirmInput').value = '';
+            document.getElementById('deleteEntityConfirmBtn').disabled = true;
+            document.getElementById('deleteEntityConfirmInput').classList.remove('is-invalid');
+            document.getElementById('deleteEntityConfirmError').style.display = 'none';
+        });
+    }
+});
 
 // Prevent filterEntities from running on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -196,7 +376,92 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
         pageLoaded = true;
     }, 100);
+    setupEntityDragDrop();
 });
+
+function setupEntityDragDrop() {
+    const container = document.getElementById('entitiesContainer');
+    if (!container) return;
+    
+    const entityItems = container.querySelectorAll('.entity-item.draggable');
+    const sortBy = document.getElementById('sortBy');
+    const checkedTags = document.querySelectorAll('.tag-filter-checkbox:checked');
+    const canReorder = (!sortBy || sortBy.value === 'display_order') && checkedTags.length === 0;
+    
+    if (!canReorder || entityItems.length === 0) return;
+    
+    entityItems.forEach(function(item) {
+        item.removeEventListener('dragstart', handleEntityDragStart);
+        item.removeEventListener('dragend', handleEntityDragEnd);
+        item.addEventListener('dragstart', handleEntityDragStart);
+        item.addEventListener('dragend', handleEntityDragEnd);
+    });
+    
+    container.removeEventListener('dragover', handleEntityDragOver);
+    container.removeEventListener('dragleave', handleEntityDragLeave);
+    container.removeEventListener('drop', handleEntityDrop);
+    container.addEventListener('dragover', handleEntityDragOver);
+    container.addEventListener('dragleave', handleEntityDragLeave);
+    container.addEventListener('drop', handleEntityDrop);
+}
+
+function handleEntityDragStart(e) {
+    e.dataTransfer.setData('entityId', e.currentTarget.dataset.entityId);
+    e.currentTarget.classList.add('dragging');
+}
+
+function handleEntityDragEnd(e) {
+    e.currentTarget.classList.remove('dragging');
+    document.querySelectorAll('.entity-item.drop-target').forEach(function(el) { el.classList.remove('drop-target'); });
+}
+
+function handleEntityDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const targetItem = e.target.closest('.entity-item.draggable');
+    document.querySelectorAll('.entity-item.drop-target').forEach(function(el) { el.classList.remove('drop-target'); });
+    if (targetItem) targetItem.classList.add('drop-target');
+}
+
+function handleEntityDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+        document.querySelectorAll('.entity-item.drop-target').forEach(function(el) { el.classList.remove('drop-target'); });
+    }
+}
+
+function handleEntityDrop(e) {
+    e.preventDefault();
+    document.querySelectorAll('.entity-item.drop-target').forEach(function(el) { el.classList.remove('drop-target'); });
+    
+    const entityId = e.dataTransfer.getData('entityId');
+    const targetItem = e.target.closest('.entity-item.draggable');
+    if (!entityId) return;
+    
+    const container = document.getElementById('entitiesContainer');
+    const items = Array.from(container.querySelectorAll('.entity-item.draggable'));
+    let orderedIds = items.map(function(el) { return el.dataset.entityId; });
+    const draggedIdx = orderedIds.indexOf(entityId);
+    if (draggedIdx === -1) return;
+    
+    orderedIds.splice(draggedIdx, 1);
+    if (targetItem && targetItem.dataset.entityId !== entityId) {
+        const targetIdx = orderedIds.indexOf(targetItem.dataset.entityId);
+        if (targetIdx !== -1) orderedIds.splice(targetIdx, 0, entityId);
+        else orderedIds.push(entityId);
+    } else {
+        orderedIds.push(entityId);
+    }
+    
+    const formData = new FormData();
+    orderedIds.forEach(function(id) { formData.append('entity_ids', id); });
+    
+    fetch('/category/' + categoryId + '/entity/reorder', {
+        method: 'POST',
+        body: formData
+    })
+    .then(function() { window.location.reload(); })
+    .catch(function() { window.location.reload(); });
+}
 
 function enableCompareMode() {
     compareMode = true;
@@ -255,19 +520,20 @@ function compareSelected() {
 }
 
 function toggleTagFilter() {
+    const filterSection = document.getElementById('filterSection');
     const filterRow = document.getElementById('tagFilterRow');
     const toggleBtn = document.getElementById('toggleFilterBtn');
     
-    if (!filterRow || !toggleBtn) {
+    if (!filterSection || !filterRow || !toggleBtn) {
         console.error('Filter elements not found');
         return;
     }
     
-    if (filterRow.classList.contains('d-none')) {
-        filterRow.classList.remove('d-none');
+    if (filterSection.classList.contains('d-none')) {
+        filterSection.classList.remove('d-none');
         toggleBtn.innerHTML = '<i class="bi bi-funnel-fill"></i> Hide Filter';
     } else {
-        filterRow.classList.add('d-none');
+        filterSection.classList.add('d-none');
         toggleBtn.innerHTML = '<i class="bi bi-funnel"></i> Show Filter';
     }
 }
@@ -291,6 +557,7 @@ function filterEntities() {
     const tagFilter = checkedTags.length > 0 ? checkedTags.join(',') : '';
     const sortBy = document.getElementById('sortBy').value;
     const sortOrder = document.getElementById('sortOrder').value;
+    const canReorder = checkedTags.length === 0 && sortBy === 'display_order';
     
     fetch(`/api/category/${categoryId}/entities?tags=${tagFilter}&sort=${sortBy}&order=${sortOrder}`)
         .then(response => response.json())
@@ -304,16 +571,15 @@ function filterEntities() {
             }
             
             data.forEach(item => {
-                const tagsHtml = item.tags.map(tag => 
-                    `<span class="tag-badge" style="background-color: ${tag.color}20; color: ${tag.color}; border: 1px solid ${tag.color}">${tag.name}</span>`
-                ).join('');
-                
                 // Generate image HTML - show image if available, otherwise placeholder
                 let imageHtml = '';
                 if (item.primary_image) {
+                    const baseName = item.primary_image.replace(/\.[^/.]+$/, '');
+                    const thumbUrl = `/static/uploads/thumbnails/${baseName}_thumb500.jpg`;
+                    const fullUrl = `/static/uploads/${item.primary_image}`;
                     imageHtml = `<a href="/category/${categoryId}/entity/${item.id}" style="text-decoration: none; display: block;">
                         <div class="entity-image-container" style="cursor: pointer;">
-                            <img src="/static/uploads/${item.primary_image}" alt="${item.name}" class="entity-card-image">
+                            <img src="${thumbUrl}" alt="${item.name}" class="entity-card-image" onerror="this.onerror=null; this.src='${fullUrl}'">
                         </div>
                     </a>`;
                 } else {
@@ -326,8 +592,11 @@ function filterEntities() {
                     </a>`;
                 }
                 
+                const dragAttrs = canReorder ? ' draggable="true" class="col-lg col-md-4 col-sm-6 mb-4 entity-item draggable"' : ' class="col-lg col-md-4 col-sm-6 mb-4 entity-item"';
+                const tagCount = item.tags ? item.tags.length : 0;
+                const entityNameEscaped = (item.name || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                 const card = `
-                    <div class="col-lg-3 col-md-4 col-sm-6 mb-4 entity-item" data-entity-id="${item.id}">
+                    <div${dragAttrs} data-entity-id="${item.id}" data-entity-name="${entityNameEscaped}" data-tag-count="${tagCount}">
                         <div class="card entity-card h-100">
                             <div class="form-check compare-checkbox ${compareMode ? '' : 'd-none'} position-absolute" style="top: 10px; left: 10px; z-index: 10; background: rgba(255,255,255,0.9); padding: 5px; border-radius: 4px;">
                                 <input class="form-check-input" type="checkbox" value="${item.id}" id="compare_${item.id}" onchange="updateSelectedCount()">
@@ -336,14 +605,11 @@ function filterEntities() {
                             ${imageHtml}
                             <div class="card-body">
                                 <h5 class="card-title mb-2">${item.name}</h5>
-                                <div class="mb-2">${tagsHtml}</div>
                             </div>
                             <div class="card-footer bg-transparent border-top-0">
                                 <div class="d-grid gap-2">
                                     <a href="/category/${categoryId}/entity/${item.id}/edit" class="btn btn-sm btn-primary">Edit</a>
-                                    <form method="POST" action="/category/${categoryId}/entity/${item.id}/delete" class="d-inline" onsubmit="return confirm('Are you sure?');">
-                                        <button type="submit" class="btn btn-sm btn-danger w-100">Delete</button>
-                                    </form>
+                                    <button type="button" class="btn btn-sm btn-danger w-100" onclick="openDeleteEntityModal(this)">Delete</button>
                                 </div>
                             </div>
                         </div>
@@ -356,6 +622,7 @@ function filterEntities() {
             if (compareMode) {
                 updateSelectedCount();
             }
+            setupEntityDragDrop();
         })
         .catch(error => {
             console.error('Error:', error);

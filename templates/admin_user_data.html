@@ -91,13 +91,19 @@
     </div>
     <div>
         <div class="btn-group me-2" role="group">
-            <a href="/admin/user/{{ user.id }}/backup" class="btn btn-success">
+            <a href="/admin/user/{{ user.id }}/backup/zip" class="btn btn-success" title="Export with images">
+                <i class="bi bi-file-earmark-zip"></i> Export (ZIP)
+            </a>
+            <a href="/admin/user/{{ user.id }}/backup" class="btn btn-outline-success">
                 <i class="bi bi-download"></i> JSON
             </a>
-            <a href="/admin/user/{{ user.id }}/backup/csv" class="btn btn-info">
+            <a href="/admin/user/{{ user.id }}/backup/csv" class="btn btn-outline-info">
                 <i class="bi bi-file-earmark-spreadsheet"></i> CSV
             </a>
         </div>
+        <a href="/admin/user/{{ user.id }}/import" class="btn btn-warning me-2">
+            <i class="bi bi-upload"></i> Import
+        </a>
         <a href="/admin/users" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Back to Users
         </a>

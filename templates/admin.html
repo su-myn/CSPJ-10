@@ -198,7 +198,7 @@
             <li><strong>JSON:</strong> Complete structured data with all relationships (best for data restoration)</li>
             <li><strong>CSV:</strong> Flat spreadsheet format (best for analysis in Excel/Google Sheets)</li>
         </ul>
-        <p class="mb-0"><strong>Note:</strong> Uploaded images are not included in backups. You may need to backup the <code>static/uploads</code> folder separately.</p>
+        <p class="mb-0"><strong>Per-user export:</strong> Use the ZIP button on each user (in User Breakdown or <a href="/admin/users">Manage Users</a>) to export that user's data <em>including images</em>. JSON/CSV backups do not include image files.</p>
     </div>
     <div class="d-grid gap-2 d-md-block">
         <a href="/admin/backup/all" class="btn btn-success btn-lg me-2">
@@ -252,6 +252,12 @@
                     <td>
                         <a href="/admin/user/{{ user.id }}/data" class="btn btn-sm btn-primary me-2">
                             <i class="bi bi-eye"></i> View Data
+                        </a>
+                        <a href="/admin/user/{{ user.id }}/backup/zip" class="btn btn-sm btn-success me-1" title="Export with images">
+                            <i class="bi bi-file-earmark-zip"></i>
+                        </a>
+                        <a href="/admin/user/{{ user.id }}/import" class="btn btn-sm btn-warning me-1" title="Import data">
+                            <i class="bi bi-upload"></i>
                         </a>
                         <a href="/admin/users" class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-people"></i> Manage

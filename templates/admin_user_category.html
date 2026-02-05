@@ -65,7 +65,7 @@
             {% if item.primary_image %}
                 <a href="/admin/user/{{ user.id }}/category/{{ category.id }}/entity/{{ item.entity.id }}" style="text-decoration: none; display: block;">
                     <div class="entity-image-container" style="cursor: pointer;">
-                        <img src="{{ url_for('static', filename='uploads/' + item.primary_image) }}" alt="{{ item.entity.name }}" class="entity-card-image">
+                        <img src="{{ item.primary_image|thumbnail_url(500) }}" alt="{{ item.entity.name }}" class="entity-card-image" loading="lazy">
                     </div>
                 </a>
             {% else %}

@@ -1,0 +1,643 @@
+{% extends "base.html" %}
+
+{% block title %}News Feed - Personal Database{% endblock %}
+
+{% block extra_css %}
+<style>
+    .post-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        background: #ffffff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .post-header {
+        border-bottom: 2px solid #e9ecef;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+    }
+    .post-creator {
+        font-weight: bold;
+        color: #007bff;
+        font-size: 1.1em;
+    }
+    .post-category {
+        color: #6c757d;
+        font-size: 0.9em;
+    }
+    .friend-request-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        background: #f8f9fa;
+    }
+    .compare-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        overflow: visible;
+        background: #ffffff;
+        margin-top: 15px;
+    }
+    .field-row {
+        display: grid;
+        gap: 0;
+        align-items: start;
+        margin-bottom: 0;
+    }
+    .field-row.header-row {
+        margin-bottom: 10px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: #ffffff;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .field-row:not(.header-row) {
+        margin-bottom: 0;
+        border-top: 1px solid #e9ecef;
+    }
+    .field-cell {
+        border: none;
+        border-right: 1px solid #e9ecef;
+        padding: 6px 12px;
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+    }
+    .field-row .field-cell:last-child {
+        border-right: none;
+    }
+    .entity-name {
+        font-size: 1.3em;
+        font-weight: bold;
+        margin-bottom: 8px;
+        color: #007bff;
+        padding-bottom: 8px;
+    }
+    .compare-image {
+        width: 150px;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 4px;
+        display: block;
+        margin: 0 auto;
+        cursor: pointer;
+    }
+    .tag-badge {
+        display: inline-block;
+        margin: 2px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.85em;
+    }
+    .field-label {
+        font-weight: bold;
+        color: #000000;
+        margin-right: 8px;
+        font-size: 0.9em;
+    }
+    .field-value {
+        color: #212529;
+        font-size: 0.9em;
+    }
+    .comment-item {
+        border-left: 3px solid #007bff;
+    }
+    .comments-section {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #e9ecef;
+    }
+    .comments-list {
+        max-height: 300px;
+        overflow-y: auto;
+        margin-bottom: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-people"></i> News Feed</h1>
+    <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+</div>
+
+<!-- Friend Requests Section -->
+{% if pending_requests %}
+<div class="mb-4">
+    <h3>Friend Requests</h3>
+    {% for request in pending_requests %}
+    <div class="friend-request-card">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <strong>{{ request.username }}</strong> wants to be your friend
+            </div>
+            <div>
+                <form method="POST" action="/friend/accept" class="d-inline">
+                    <input type="hidden" name="request_id" value="{{ request.id }}">
+                    <button type="submit" class="btn btn-sm btn-success">Accept</button>
+                </form>
+                <form method="POST" action="/friend/reject" class="d-inline">
+                    <input type="hidden" name="request_id" value="{{ request.id }}">
+                    <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Send Friend Request Section -->
+<div class="mb-4">
+    <h3>Find Friends</h3>
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" action="/friend/request" class="d-flex gap-2">
+                <select name="user_id" class="form-select" required>
+                    <option value="">-- Select User --</option>
+                    {% for user in all_users %}
+                    <option value="{{ user.id }}">{{ user.username }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">Send Friend Request</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- News Feed Posts -->
+{% if posts_data %}
+<h3>Shared Posts</h3>
+{% for post_info in posts_data %}
+<div class="post-card">
+    <div class="post-header">
+        <div class="post-creator">
+            <i class="bi bi-person-circle"></i> {{ post_info.post.username }}
+        </div>
+        <div class="post-category">
+            <i class="bi bi-folder"></i> {{ post_info.category.name }}
+        </div>
+    </div>
+    
+    <!-- Entity Comparison View -->
+    <div class="compare-container">
+        <!-- Header row with entity names and images -->
+        <div class="field-row header-row" style="grid-template-columns: repeat({{ post_info.num_entities }}, 1fr);">
+            {% for entity_data in post_info.entities_data %}
+            <div class="field-cell">
+                <div class="entity-name">{{ entity_data.entity.name }}</div>
+                {% if entity_data.primary_image %}
+                <div class="text-center mt-2">
+                    <img src="{{ entity_data.primary_image|thumbnail_url(300) }}" alt="{{ entity_data.entity.name }}" class="compare-image" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + entity_data.primary_image) }}" onclick="showImageModal(this.getAttribute('data-image-src'))" loading="lazy">
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Tags row -->
+        <div class="field-row" style="grid-template-columns: repeat({{ post_info.num_entities }}, 1fr);">
+            {% for entity_data in post_info.entities_data %}
+            <div class="field-cell">
+                <div class="field-label">Tags:</div>
+                <div class="field-value">
+                    {% if entity_data.tags %}
+                        {% for tag in entity_data.tags %}
+                        <span class="tag-badge" style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}">
+                            {{ tag.name }}
+                        </span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Field rows -->
+        {% for field in post_info.fields %}
+        {% if field.field_type != 'image' %}
+        <div class="field-row" style="grid-template-columns: repeat({{ post_info.num_entities }}, 1fr);">
+            {% for entity_data in post_info.entities_data %}
+            <div class="field-cell">
+                <div class="field-label">{{ field.label }}:</div>
+                {% set field_id_int = field.id|int %}
+                {% set raw_value = entity_data.field_values.get(field_id_int, '') or entity_data.field_values.get(field.id, '') or '' %}
+                <div class="field-value">
+                    {% if raw_value %}
+                        {% if field.field_type == 'textarea' %}
+                            <div style="white-space: pre-line;">{{ raw_value }}</div>
+                        {% elif field.field_type == 'checkbox' %}
+                            {{ 'Yes' if raw_value == 'Yes' else 'No' }}
+                        {% elif field.field_type == 'checkbox_list' %}
+                            {% set selected_values = raw_value.split(',') %}
+                            {% for val in selected_values %}
+                            {% if val.strip() %}
+                            <span class="badge bg-primary me-1">{{ val.strip() }}</span>
+                            {% endif %}
+                            {% endfor %}
+                        {% elif field.field_type == 'image_album' %}
+                            {% set image_list = raw_value|from_json if raw_value else [] %}
+                            {% if image_list %}
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for img_filename in image_list %}
+                                <img src="{{ img_filename|thumbnail_url(100) }}" alt="{{ field.label }}" class="img-thumbnail" style="max-width: 100px; max-height: 100px; object-fit: cover;" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + img_filename) }}" onclick="showImageModal(this.getAttribute('data-image-src'))" loading="lazy">
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="text-muted">No images</span>
+                            {% endif %}
+                        {% elif field.field_type == 'video_embed' %}
+                            {% set video_list = raw_value|from_json if raw_value else [] %}
+                            {% if video_list %}
+                            <div class="video-embed-container" style="display: flex; flex-direction: column; gap: 10px;">
+                                {% for embed_url in video_list %}
+                                <div class="video-embed-item" style="position: relative;">
+                                    <div class="ratio ratio-16x9">
+                                        <iframe src="{{ embed_url }}" allowfullscreen frameborder="0" style="width: 100%; height: 100%;"></iframe>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="text-muted">No videos</span>
+                            {% endif %}
+                        {% else %}
+                            {{ raw_value }}
+                        {% endif %}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    
+    <div class="mt-3">
+        <!-- Like Section -->
+        <div class="d-flex align-items-center gap-3 mb-2">
+            <button class="btn btn-sm {% if post_info.user_liked %}btn-danger{% else %}btn-outline-danger{% endif %}" onclick="toggleLike({{ post_info.post.id }}, this)">
+                <i class="bi bi-heart{% if post_info.user_liked %}-fill{% endif %}"></i> 
+                <span class="like-text">{% if post_info.user_liked %}Unlike{% else %}Like{% endif %}</span>
+            </button>
+            
+            {% if post_info.post.show_like_count %}
+            <span class="like-count" id="like-count-{{ post_info.post.id }}">
+                <strong>{{ post_info.like_count }}</strong> {% if post_info.like_count == 1 %}like{% else %}likes{% endif %}
+            </span>
+            {% else %}
+            <span class="text-muted">
+                <i class="bi bi-eye-slash"></i> Like count hidden
+            </span>
+            {% endif %}
+        </div>
+        
+        <!-- Likers Section -->
+        {% if post_info.post.show_like_persons and post_info.likers %}
+        <div class="mb-2">
+            <small class="text-muted">Liked by: 
+                {% for liker in post_info.likers %}
+                <strong>{{ liker.username }}</strong>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </small>
+        </div>
+        {% elif not post_info.post.show_like_persons %}
+        <div class="mb-2">
+            <small class="text-muted">
+                <i class="bi bi-eye-slash"></i> Like persons hidden
+            </small>
+        </div>
+        {% endif %}
+        
+        <!-- Comments Section -->
+        <div class="comments-section" id="comments-section-{{ post_info.post.id }}">
+            {# Check if comments are visible (handle both boolean and integer) #}
+            {% set show_comments_val = post_info.post.show_comments %}
+            {% if show_comments_val == 1 or show_comments_val == True or show_comments_val == '1' %}
+                {% set comments_visible = true %}
+            {% else %}
+                {% set comments_visible = false %}
+            {% endif %}
+            
+            {# Use pre-computed flag from backend #}
+            {% set has_own_comments = post_info.has_own_comments %}
+            {% set current_user_id_val = post_info.current_user_id|int %}
+            
+            {# Show comments section if: comments are visible OR user is creator OR user has own comments #}
+            {% if comments_visible or post_info.is_creator or has_own_comments %}
+            <div class="mb-2">
+                {% if post_info.is_creator %}
+                    <strong>Comments:</strong>
+                {% elif has_own_comments and not comments_visible %}
+                    <strong>Your Comments:</strong>
+                {% else %}
+                    <strong>Comments:</strong>
+                {% endif %}
+            </div>
+            <div class="comments-list" id="comments-list-{{ post_info.post.id }}">
+                {% for comment in post_info.comments %}
+                {# Show comment if: comments are visible OR user is creator OR comment is by current user #}
+                {% set comment_user_id = comment.user_id|int %}
+                {% set comment_by_user = (comment_user_id == current_user_id_val) %}
+                {% if comments_visible or post_info.is_creator or comment_by_user %}
+                <div class="comment-item mb-2 p-2 bg-light rounded" data-comment-user-id="{{ comment.user_id }}">
+                    <strong>{{ comment.username }}</strong>: {{ comment.comment_text }}
+                    <small class="text-muted d-block">{{ comment.created_at }}</small>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% else %}
+            {# No comments visible to this user #}
+            <div class="mb-2">
+                <small class="text-muted">
+                    <i class="bi bi-eye-slash"></i> Comments are hidden (only creator{% if has_own_comments %} and you{% endif %} can see them)
+                </small>
+            </div>
+            {% endif %}
+            
+            <!-- Always show comment input (anyone who can see the post can comment) -->
+            <div class="add-comment mt-2">
+                <div class="input-group">
+                    <input type="text" class="form-control form-control-sm" id="comment-input-{{ post_info.post.id }}" placeholder="Add a comment..." onkeypress="handleCommentKeypress(event, {{ post_info.post.id }})">
+                    <button class="btn btn-sm btn-primary" onclick="addComment({{ post_info.post.id }})">Post</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Visibility Controls (Creator Only) -->
+        {% if post_info.is_creator %}
+        <div class="mt-3 pt-3 border-top">
+            <small class="text-muted d-block mb-2">
+                <i class="bi bi-gear"></i> <strong>Visibility Settings:</strong>
+            </small>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="show-like-count-{{ post_info.post.id }}" {% if post_info.post.show_like_count %}checked{% endif %} onchange="updateVisibility({{ post_info.post.id }}, 'show_like_count', this.checked)">
+                <label class="form-check-label" for="show-like-count-{{ post_info.post.id }}">Show Like Count</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="show-like-persons-{{ post_info.post.id }}" {% if post_info.post.show_like_persons %}checked{% endif %} onchange="updateVisibility({{ post_info.post.id }}, 'show_like_persons', this.checked)">
+                <label class="form-check-label" for="show-like-persons-{{ post_info.post.id }}">Show Like Persons</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="show-comments-{{ post_info.post.id }}" {% if post_info.post.show_comments %}checked{% endif %} onchange="updateVisibility({{ post_info.post.id }}, 'show_comments', this.checked)">
+                <label class="form-check-label" for="show-comments-{{ post_info.post.id }}">Show Comments</label>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="mt-2 text-muted small">
+            <i class="bi bi-clock"></i> Shared {{ post_info.post.created_at }}
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="alert alert-info">
+    <h4>No posts yet!</h4>
+    <p>When users share their entity comparisons, they will appear here.</p>
+</div>
+{% endif %}
+
+<!-- Image Modal -->
+<div class="modal fade" id="imageModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Image</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalImage" src="" alt="Image" class="img-fluid">
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+function showImageModal(imageSrc) {
+    document.getElementById('modalImage').src = imageSrc;
+}
+
+function toggleLike(postId, buttonElement) {
+    fetch(`/api/post/${postId}/like`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        
+        // Update button
+        const icon = buttonElement.querySelector('i');
+        const text = buttonElement.querySelector('.like-text');
+        
+        if (data.is_liked) {
+            buttonElement.classList.remove('btn-outline-danger');
+            buttonElement.classList.add('btn-danger');
+            icon.classList.remove('bi-heart');
+            icon.classList.add('bi-heart-fill');
+            text.textContent = 'Unlike';
+        } else {
+            buttonElement.classList.remove('btn-danger');
+            buttonElement.classList.add('btn-outline-danger');
+            icon.classList.remove('bi-heart-fill');
+            icon.classList.add('bi-heart');
+            text.textContent = 'Like';
+        }
+        
+        // Update like count if visible
+        const likeCountElement = document.getElementById(`like-count-${postId}`);
+        if (likeCountElement) {
+            likeCountElement.innerHTML = `<strong>${data.like_count}</strong> ${data.like_count == 1 ? 'like' : 'likes'}`;
+        }
+        
+        // Reload page to update likers list if visible
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error toggling like');
+    });
+}
+
+function addComment(postId) {
+    const input = document.getElementById(`comment-input-${postId}`);
+    const commentText = input.value.trim();
+    
+    if (!commentText) {
+        alert('Please enter a comment');
+        return;
+    }
+    
+    fetch(`/api/post/${postId}/comment`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            comment_text: commentText
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        
+        // Add comment to list - always show user's own comments
+        let commentsList = document.getElementById(`comments-list-${postId}`);
+        const commentsSection = document.getElementById(`comments-section-${postId}`);
+        
+        // If comments list doesn't exist (hidden mode), create it
+        if (!commentsList && commentsSection) {
+            // Remove the "hidden" message if it exists
+            const hiddenMsg = commentsSection.querySelector('.text-muted');
+            if (hiddenMsg && hiddenMsg.textContent.includes('hidden')) {
+                hiddenMsg.remove();
+            }
+            
+            // Check if header exists, if not create it
+            let headerDiv = commentsSection.querySelector('.mb-2');
+            let header = headerDiv ? headerDiv.querySelector('strong') : null;
+            
+            if (!headerDiv || !header) {
+                headerDiv = document.createElement('div');
+                headerDiv.className = 'mb-2';
+                header = document.createElement('strong');
+                header.textContent = 'Your Comments:';
+                headerDiv.appendChild(header);
+                const addCommentDiv = commentsSection.querySelector('.add-comment');
+                if (addCommentDiv) {
+                    commentsSection.insertBefore(headerDiv, addCommentDiv);
+                } else {
+                    commentsSection.appendChild(headerDiv);
+                }
+            } else {
+                // Update header if it says "Comments:" to "Your Comments:"
+                if (header.textContent.includes('Comments:') && !header.textContent.includes('Your')) {
+                    header.textContent = 'Your Comments:';
+                }
+            }
+            
+            commentsList = document.createElement('div');
+            commentsList.className = 'comments-list';
+            commentsList.id = `comments-list-${postId}`;
+            const addCommentDiv = commentsSection.querySelector('.add-comment');
+            if (addCommentDiv) {
+                commentsSection.insertBefore(commentsList, addCommentDiv);
+            } else {
+                commentsSection.appendChild(commentsList);
+            }
+        }
+        
+        if (commentsList) {
+            const commentDiv = document.createElement('div');
+            commentDiv.className = 'comment-item mb-2 p-2 bg-light rounded';
+            commentDiv.setAttribute('data-comment-user-id', data.comment.user_id);
+            commentDiv.innerHTML = `
+                <strong>${data.comment.username}</strong>: ${data.comment.comment_text}
+                <small class="text-muted d-block">${data.comment.created_at}</small>
+            `;
+            commentsList.appendChild(commentDiv);
+        } else {
+            console.error('Could not find or create comments list for post', postId);
+        }
+        
+        // Clear input
+        input.value = '';
+        
+        // Show success message
+        const successMsg = document.createElement('div');
+        successMsg.className = 'alert alert-success alert-dismissible fade show mt-2';
+        successMsg.innerHTML = `
+            <i class="bi bi-check-circle"></i> Comment added successfully!
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        const commentsSection = document.getElementById(`comments-section-${postId}`);
+        if (commentsSection) {
+            commentsSection.appendChild(successMsg);
+            
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                successMsg.remove();
+            }, 3000);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error adding comment: ' + error.message);
+    });
+}
+
+function handleCommentKeypress(event, postId) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        addComment(postId);
+    }
+}
+
+function updateVisibility(postId, setting, value) {
+    const settings = {
+        show_like_count: document.getElementById(`show-like-count-${postId}`).checked,
+        show_like_persons: document.getElementById(`show-like-persons-${postId}`).checked,
+        show_comments: document.getElementById(`show-comments-${postId}`).checked
+    };
+    
+    fetch(`/api/post/${postId}/visibility`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            // Revert checkbox
+            const checkboxId = setting.replace('_', '-');
+            document.getElementById(`${checkboxId}-${postId}`).checked = !value;
+            return;
+        }
+        
+        // Reload page to reflect visibility changes
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating visibility settings');
+        // Revert checkbox
+        const checkboxId = setting.replace('_', '-');
+        document.getElementById(`${checkboxId}-${postId}`).checked = !value;
+    });
+}
+</script>
+{% endblock %}
+{% endblock %}

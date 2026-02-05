@@ -106,6 +106,38 @@
         opacity: 0;
         margin-bottom: 0;
     }
+    
+    .category-card.draggable {
+        cursor: grab;
+    }
+    
+    .category-card.draggable:active {
+        cursor: grabbing;
+    }
+    
+    .category-card.dragging {
+        opacity: 0.5;
+    }
+    
+    .section-drop-zone.drag-over {
+        background-color: rgba(102, 126, 234, 0.15);
+        border-radius: 12px;
+        min-height: 80px;
+        transition: background-color 0.2s ease;
+    }
+    
+    .category-card.drop-target {
+        border: 3px dotted #4a6cf7;
+    }
+    
+    a.category-card {
+        text-decoration: none;
+        color: inherit;
+    }
+    
+    a.category-card:hover {
+        color: inherit;
+    }
 </style>
 {% endblock %}
 
@@ -132,40 +164,15 @@
         </h2>
     </div>
     
-    <div class="section-categories" id="section-categories-unassigned">
+    <div class="section-categories section-drop-zone" id="section-categories-unassigned" data-section-id="">
         <div class="row">
             {% for category in unassigned_categories %}
             <div class="col-md-4 mb-3">
-                <div class="card h-100 category-card">
+                <a href="/category/{{ category.id }}" class="card h-100 category-card draggable" draggable="true" data-category-id="{{ category.id }}" data-section-id="">
                     <div class="card-body d-flex align-items-center justify-content-center category-card-body color-{{ loop.index0 % 10 }}">
-                        <h3 class="card-title mb-0 text-center" style="font-size: 1.5rem; font-weight: 600;">
-                            <a href="/category/{{ category.id }}" class="text-decoration-none">{{ category.name }}</a>
-                        </h3>
+                        <h3 class="card-title mb-0 text-center" style="font-size: 1.5rem; font-weight: 600;">{{ category.name }}</h3>
                     </div>
-                    <div class="card-footer category-card-footer">
-                        <div class="dropdown d-inline">
-                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="moveDropdown{{ category.id }}" data-bs-toggle="dropdown" aria-expanded="false">
-                                Move to Section
-                            </button>
-                            <ul class="dropdown-menu" aria-labelledby="moveDropdown{{ category.id }}">
-                                <li>
-                                    <form method="POST" action="/category/{{ category.id }}/move" class="d-inline">
-                                        <input type="hidden" name="section_id" value="">
-                                        <button type="submit" class="dropdown-item">Unassigned (Top)</button>
-                                    </form>
-                                </li>
-                                {% for section_item in sections_with_categories %}
-                                <li>
-                                    <form method="POST" action="/category/{{ category.id }}/move" class="d-inline">
-                                        <input type="hidden" name="section_id" value="{{ section_item.section.id }}">
-                                        <button type="submit" class="dropdown-item">{{ section_item.section.name }}</button>
-                                    </form>
-                                </li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                    </div>
-                </div>
+                </a>
             </div>
             {% endfor %}
         </div>
@@ -190,49 +197,22 @@
         </form>
     </div>
     
-    <div class="section-categories" id="section-categories-{{ section_item.section.id }}">
+    <div class="section-categories section-drop-zone" id="section-categories-{{ section_item.section.id }}" data-section-id="{{ section_item.section.id }}">
         {% if section_item.categories %}
         <div class="row">
             {% for category in section_item.categories %}
             <div class="col-md-4 mb-3">
-                <div class="card h-100 category-card">
+                <a href="/category/{{ category.id }}" class="card h-100 category-card draggable" draggable="true" data-category-id="{{ category.id }}" data-section-id="{{ section_item.section.id }}">
                     <div class="card-body d-flex align-items-center justify-content-center category-card-body color-{{ loop.index0 % 10 }}">
-                        <h3 class="card-title mb-0 text-center" style="font-size: 1.5rem; font-weight: 600;">
-                            <a href="/category/{{ category.id }}" class="text-decoration-none">{{ category.name }}</a>
-                        </h3>
+                        <h3 class="card-title mb-0 text-center" style="font-size: 1.5rem; font-weight: 600;">{{ category.name }}</h3>
                     </div>
-                    <div class="card-footer category-card-footer">
-                        <div class="dropdown d-inline">
-                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="moveDropdown{{ category.id }}" data-bs-toggle="dropdown" aria-expanded="false">
-                                Move to Section
-                            </button>
-                            <ul class="dropdown-menu" aria-labelledby="moveDropdown{{ category.id }}">
-                                <li>
-                                    <form method="POST" action="/category/{{ category.id }}/move" class="d-inline">
-                                        <input type="hidden" name="section_id" value="">
-                                        <button type="submit" class="dropdown-item">Unassigned (Top)</button>
-                                    </form>
-                                </li>
-                                {% for other_section in sections_with_categories %}
-                                {% if other_section.section.id != section_item.section.id %}
-                                <li>
-                                    <form method="POST" action="/category/{{ category.id }}/move" class="d-inline">
-                                        <input type="hidden" name="section_id" value="{{ other_section.section.id }}">
-                                        <button type="submit" class="dropdown-item">{{ other_section.section.name }}</button>
-                                    </form>
-                                </li>
-                                {% endif %}
-                                {% endfor %}
-                            </ul>
-                        </div>
-                    </div>
-                </div>
+                </a>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <div class="alert alert-info">
-            <p class="mb-0">No categories in this section yet. Create a category and move it here.</p>
+        <div class="alert alert-info mb-0">
+            <p class="mb-0">No categories in this section yet. Drag a category here to add it.</p>
         </div>
         {% endif %}
     </div>
@@ -321,6 +301,104 @@ function handleSectionNameKeypress(event, sectionId) {
         display.classList.remove('d-none');
     }
 }
+
+// Drag and drop for category cards
+document.addEventListener('DOMContentLoaded', function() {
+    const categoryCards = document.querySelectorAll('.category-card.draggable');
+    const dropZones = document.querySelectorAll('.section-drop-zone');
+    let dragSourceSectionId = '';
+
+    categoryCards.forEach(function(card) {
+        card.addEventListener('dragstart', function(e) {
+            e.dataTransfer.setData('categoryId', card.dataset.categoryId);
+            e.dataTransfer.setData('sourceSectionId', card.dataset.sectionId || '');
+            e.dataTransfer.effectAllowed = 'move';
+            dragSourceSectionId = card.dataset.sectionId || '';
+            card.classList.add('dragging');
+        });
+
+        card.addEventListener('dragend', function(e) {
+            card.classList.remove('dragging');
+            dragSourceSectionId = '';
+            dropZones.forEach(function(zone) {
+                zone.classList.remove('drag-over');
+                zone.querySelectorAll('.category-card.drop-target').forEach(function(c) { c.classList.remove('drop-target'); });
+            });
+        });
+    });
+
+    dropZones.forEach(function(zone) {
+        zone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            zone.classList.add('drag-over');
+            const targetSectionId = zone.dataset.sectionId || '';
+            const targetCard = e.target.closest('.category-card.draggable');
+            zone.querySelectorAll('.category-card.drop-target').forEach(function(c) { c.classList.remove('drop-target'); });
+            if (dragSourceSectionId === targetSectionId && targetCard) {
+                targetCard.classList.add('drop-target');
+            }
+        });
+
+        zone.addEventListener('dragleave', function(e) {
+            if (!zone.contains(e.relatedTarget)) {
+                zone.classList.remove('drag-over');
+                zone.querySelectorAll('.category-card.drop-target').forEach(function(c) { c.classList.remove('drop-target'); });
+            }
+        });
+
+        zone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            zone.querySelectorAll('.category-card.drop-target').forEach(function(c) { c.classList.remove('drop-target'); });
+
+            const categoryId = e.dataTransfer.getData('categoryId');
+            const sourceSectionId = e.dataTransfer.getData('sourceSectionId');
+            const targetSectionId = zone.dataset.sectionId || '';
+
+            if (!categoryId) return;
+
+            const targetCard = e.target.closest('.category-card.draggable');            
+            const isSameSection = (sourceSectionId === targetSectionId);
+
+            if (isSameSection) {
+                const row = zone.querySelector('.row');
+                if (!row) return;
+                const cards = Array.from(row.querySelectorAll('.category-card.draggable'));
+                let orderedIds = cards.map(function(c) { return c.dataset.categoryId; });
+                const draggedIdx = orderedIds.indexOf(categoryId);
+                if (draggedIdx === -1) return;
+                orderedIds.splice(draggedIdx, 1);
+                if (targetCard && targetCard.dataset.categoryId !== categoryId) {
+                    const targetIdx = orderedIds.indexOf(targetCard.dataset.categoryId);
+                    if (targetIdx !== -1) orderedIds.splice(targetIdx, 0, categoryId);
+                    else orderedIds.push(categoryId);
+                } else {
+                    orderedIds.push(categoryId);
+                }
+
+                const formData = new FormData();
+                orderedIds.forEach(function(id) { formData.append('category_ids', id); });
+
+                fetch('/category/reorder', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function() { window.location.reload(); })
+                .catch(function() { window.location.reload(); });
+            } else if (!isSameSection) {
+                const formData = new FormData();
+                formData.append('section_id', targetSectionId);
+                fetch('/category/' + categoryId + '/move', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function() { window.location.reload(); })
+                .catch(function() { window.location.reload(); });
+            }
+        });
+    });
+});
 </script>
 {% endblock %}
 {% endblock %}

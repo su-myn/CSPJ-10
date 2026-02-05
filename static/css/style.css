@@ -124,7 +124,7 @@ body {
 /* Entity card image container - e-commerce style */
 .entity-image-container {
     width: 100%;
-    height: 280px;
+    aspect-ratio: 1 / 1;
     overflow: hidden;
     background-color: #f8f9fa;
     display: flex;
@@ -217,9 +217,10 @@ body {
 /* Image Album Styles */
 .image-album-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, 100px);
     gap: 15px;
     margin-top: 10px;
+    justify-content: start;
 }
 
 .image-album-item {
@@ -228,6 +229,8 @@ body {
     border-radius: 8px;
     cursor: pointer;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
+    width: 100px;
+    height: 100px;
 }
 
 .image-album-item:hover {
@@ -236,8 +239,8 @@ body {
 }
 
 .image-album-img {
-    width: 100%;
-    height: 200px;
+    width: 100px;
+    height: 100px;
     object-fit: cover;
     border-radius: 8px;
     display: block;
@@ -267,12 +270,18 @@ body {
 
 @media (max-width: 768px) {
     .image-album-container {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        grid-template-columns: repeat(auto-fill, 80px);
         gap: 10px;
     }
     
+    .image-album-item {
+        width: 80px;
+        height: 80px;
+    }
+    
     .image-album-img {
-        height: 150px;
+        width: 80px;
+        height: 80px;
     }
 }
 

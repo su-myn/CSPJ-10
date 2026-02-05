@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Import Data - {{ user.username }} - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-upload"></i> Import Data for {{ user.username }}</h1>
+        <div>
+            <a href="/admin/user/{{ user.id }}/data" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to User Data
+            </a>
+            <a href="/admin/users" class="btn btn-outline-primary">
+                <i class="bi bi-people"></i> Manage Users
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title"><i class="bi bi-info-circle"></i> Import Instructions</h5>
+            <p class="card-text">Upload a backup file to restore data for this user. Supported formats:</p>
+            <ul>
+                <li><strong>ZIP file</strong> – Full backup including sections, categories, fields, entities, tags, and images (recommended)</li>
+                <li><strong>JSON file</strong> – Data only (sections, categories, fields, entities, tags). Images will not be restored.</li>
+            </ul>
+            <p class="text-muted mb-0">
+                <small>Note: Imported data will be <strong>added</strong> to the user's existing data. It will not replace or delete existing content.</small>
+            </p>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mt-4">
+        <div class="card-body">
+            <form method="POST" action="/admin/user/{{ user.id }}/import" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="backup_file" class="form-label">Select backup file</label>
+                    <input type="file" class="form-control" id="backup_file" name="backup_file" 
+                           accept=".zip,.json" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-upload"></i> Import
+                </button>
+                <a href="/admin/user/{{ user.id }}/data" class="btn btn-outline-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

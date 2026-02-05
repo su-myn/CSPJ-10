@@ -5,14 +5,17 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Edit Entity: {{ entity.name }}</h1>
-    <a href="/category/{{ category.id }}" class="btn btn-secondary">Back</a>
+    <div>
+        <button type="submit" form="entityForm" class="btn btn-primary">Update Entity</button>
+        <a href="/category/{{ category.id }}" class="btn btn-secondary">Cancel</a>
+    </div>
 </div>
 
 <div class="row">
     <div class="col-md-8">
         <div class="card">
             <div class="card-body">
-                <form method="POST" enctype="multipart/form-data">
+                <form method="POST" enctype="multipart/form-data" id="entityForm">
                     <div class="mb-3">
                         <label for="name" class="form-label">Entity Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="name" name="name" value="{{ entity.name }}" required autofocus>
@@ -96,13 +99,15 @@
                         
                         {% elif field.field_type == 'image' %}
                         {% if current_value %}
-                        <div class="mb-2">
-                            <img src="{{ url_for('static', filename='uploads/' + current_value) }}" alt="{{ field.label }}" class="entity-image">
+                        <div class="mb-2 position-relative d-inline-block" id="image_preview_{{ field.id }}">
+                            <img src="{{ url_for('static', filename='uploads/' + current_value) }}" alt="{{ field.label }}" class="entity-image" loading="lazy">
+                            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 image-single-delete-btn" data-field-id="{{ field.id }}" style="padding: 2px 6px; font-size: 0.7rem; z-index: 10;">×</button>
                             <p class="small text-muted">Current image</p>
                         </div>
+                        <input type="hidden" name="clear_image_{{ field.id }}" id="clear_image_{{ field.id }}" value="">
                         {% endif %}
-                        <input type="file" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" accept="image/*" {% if not current_value and field.required %}required{% endif %}>
-                        <small class="form-text text-muted">Accepted formats: PNG, JPG, JPEG, GIF, WEBP (Max 16MB). Leave empty to keep current image.</small>
+                        <input type="file" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" accept="image/*" data-required="{{ 'true' if field.required else 'false' }}" {% if not current_value and field.required %}required{% endif %}>
+                        <small class="form-text text-muted">Accepted formats: PNG, JPG, JPEG, GIF, WEBP (Max 16MB). Leave empty to keep current image, or use × to delete.</small>
                         
                         {% elif field.field_type == 'image_album' %}
                         {% if current_value %}
@@ -112,7 +117,7 @@
                                 {% set image_list = current_value|from_json if current_value else [] %}
                                 {% for img_filename in image_list %}
                                 <div class="image-album-item d-inline-block me-2 mb-2 position-relative">
-                                    <img src="{{ url_for('static', filename='uploads/' + img_filename) }}" alt="{{ field.label }}" class="img-thumbnail" style="width: 150px; height: 150px; object-fit: cover;">
+                                    <img src="{{ img_filename|thumbnail_url(150) }}" alt="{{ field.label }}" class="img-thumbnail" style="width: 150px; height: 150px; object-fit: cover;" loading="lazy">
                                     <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 image-delete-btn" data-filename="{{ img_filename }}" data-field-id="{{ field.id }}" style="padding: 2px 6px; font-size: 0.7rem;">×</button>
                                     <input type="hidden" name="keep_image_{{ field.id }}" value="{{ img_filename }}">
                                 </div>
@@ -123,6 +128,17 @@
                         <input type="file" class="form-control" id="field_{{ field.id }}" name="field_{{ field.id }}" accept="image/*" multiple>
                         <small class="form-text text-muted">Accepted formats: PNG, JPG, JPEG, GIF, WEBP (Max 16MB per image). Select additional images to add to the album.</small>
                         <div id="preview_{{ field.id }}" class="mt-3 image-album-preview"></div>
+                        
+                        {% elif field.field_type == 'video_embed' %}
+                        <div id="video_embed_container_{{ field.id }}">
+                            <div class="mb-2">
+                                <input type="text" class="form-control video-embed-input" id="video_embed_input_{{ field.id }}" placeholder="Paste embed URL (e.g., https://www.youtube.com/embed/VIDEO_ID or iframe src URL)" data-field-id="{{ field.id }}">
+                                <small class="form-text text-muted">Paste embed URLs one at a time. Supported: YouTube, Vimeo, and other iframe-based embeds.</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-primary mb-3" onclick="addVideoEmbed({{ field.id }})">Add Video</button>
+                            <div id="video_embed_list_{{ field.id }}" class="video-embed-list"></div>
+                            <input type="hidden" id="field_{{ field.id }}" name="field_{{ field.id }}" value="{{ current_value if current_value else '' }}">
+                        </div>
                         {% endif %}
                     </div>
                     {% endfor %}
@@ -142,11 +158,6 @@
                         {% endfor %}
                     </div>
                     {% endif %}
-                    
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">Update Entity</button>
-                        <a href="/category/{{ category.id }}" class="btn btn-secondary">Cancel</a>
-                    </div>
                 </form>
             </div>
         </div>
@@ -154,36 +165,132 @@
 </div>
 
 <script>
-// Image album preview and deletion for edit entity
+// Store selected files for each image_album field
+const selectedFilesMap = new Map();
+
+// Helper function to update file input with stored files
+function updateFileInput(input, files) {
+    try {
+        const dataTransfer = new DataTransfer();
+        files.forEach(file => {
+            dataTransfer.items.add(file);
+        });
+        input.files = dataTransfer.files;
+    } catch (err) {
+        console.warn('Could not update file input directly, files stored in memory');
+    }
+}
+
+// Helper function to update preview
+function updatePreview(fieldId, previewDiv, files) {
+    // Clear only new file previews (keep existing images from database)
+    const newFilePreviews = previewDiv.querySelectorAll('[data-is-new-file="true"]');
+    newFilePreviews.forEach(el => el.remove());
+    
+    // Show preview for all stored files
+    files.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const container = document.createElement('div');
+            container.className = 'd-inline-block me-2 mb-2 position-relative';
+            container.setAttribute('data-is-new-file', 'true');
+            container.setAttribute('data-file-id', file.name + '_' + file.size + '_' + file.lastModified);
+            
+            const img = document.createElement('img');
+            img.src = e.target.result;
+            img.className = 'img-thumbnail';
+            img.style.width = '150px';
+            img.style.height = '150px';
+            img.style.objectFit = 'cover';
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn btn-sm btn-danger position-absolute top-0 end-0 m-1';
+            removeBtn.style.cssText = 'padding: 2px 6px; font-size: 0.7rem; z-index: 10;';
+            removeBtn.innerHTML = '×';
+            removeBtn.onclick = function() {
+                // Remove from stored files by finding the file
+                const storedFiles = selectedFilesMap.get(fieldId) || [];
+                const fileId = file.name + '_' + file.size + '_' + file.lastModified;
+                const fileIndex = storedFiles.findIndex(f => 
+                    (f.name + '_' + f.size + '_' + f.lastModified) === fileId
+                );
+                if (fileIndex !== -1) {
+                    storedFiles.splice(fileIndex, 1);
+                    selectedFilesMap.set(fieldId, storedFiles);
+                    
+                    // Update preview and file input
+                    updatePreview(fieldId, previewDiv, storedFiles);
+                    const input = document.getElementById(`field_${fieldId}`);
+                    if (input) {
+                        updateFileInput(input, storedFiles);
+                    }
+                }
+            };
+            
+            container.appendChild(img);
+            container.appendChild(removeBtn);
+            previewDiv.appendChild(container);
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+// Image album preview and file management for edit entity
 document.querySelectorAll('input[type="file"][multiple]').forEach(input => {
+    const fieldId = input.id.replace('field_', '');
+    const previewDiv = document.getElementById('preview_' + fieldId);
+    
+    // Initialize storage for this field
+    if (!selectedFilesMap.has(fieldId)) {
+        selectedFilesMap.set(fieldId, []);
+    }
+    
     input.addEventListener('change', function(e) {
-        const fieldId = this.id.replace('field_', '');
-        const previewDiv = document.getElementById('preview_' + fieldId);
         if (!previewDiv) return;
         
-        previewDiv.innerHTML = '';
+        // Get newly selected files
+        const newFiles = Array.from(this.files).filter(file => file.type.startsWith('image/'));
         
-        if (this.files && this.files.length > 0) {
-            Array.from(this.files).forEach((file, index) => {
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const img = document.createElement('img');
-                        img.src = e.target.result;
-                        img.className = 'img-thumbnail me-2 mb-2';
-                        img.style.width = '150px';
-                        img.style.height = '150px';
-                        img.style.objectFit = 'cover';
-                        previewDiv.appendChild(img);
-                    };
-                    reader.readAsDataURL(file);
+        if (newFiles.length > 0) {
+            // Get existing files for this field
+            const existingFiles = selectedFilesMap.get(fieldId) || [];
+            
+            // Add new files to the stored list (avoid duplicates by checking file properties)
+            newFiles.forEach(newFile => {
+                const fileId = newFile.name + '_' + newFile.size + '_' + newFile.lastModified;
+                const isDuplicate = existingFiles.some(existing => 
+                    (existing.name + '_' + existing.size + '_' + existing.lastModified) === fileId
+                );
+                if (!isDuplicate) {
+                    existingFiles.push(newFile);
                 }
             });
+            
+            // Update stored files
+            selectedFilesMap.set(fieldId, existingFiles);
+            
+            // Update preview to show all files
+            updatePreview(fieldId, previewDiv, existingFiles);
+            
+            // Update the file input to contain all files
+            updateFileInput(input, existingFiles);
         }
     });
 });
 
-// Handle image deletion
+// Intercept form submission to ensure all stored files are included
+document.getElementById('entityForm')?.addEventListener('submit', function(e) {
+    // For each image_album field, ensure the file input has all stored files
+    selectedFilesMap.forEach((files, fieldId) => {
+        const input = document.getElementById(`field_${fieldId}`);
+        if (input && files.length > 0) {
+            updateFileInput(input, files);
+        }
+    });
+});
+
+// Handle image deletion (image_album)
 document.querySelectorAll('.image-delete-btn').forEach(btn => {
     btn.addEventListener('click', function(e) {
         e.preventDefault();
@@ -195,11 +302,16 @@ document.querySelectorAll('.image-delete-btn').forEach(btn => {
         
         if (!item) return;
         
-        // Remove the hidden input to mark image for deletion
+        // Change hidden input to mark image for deletion
         const hiddenInput = item.querySelector('input[name^="keep_image_"]');
         if (hiddenInput) {
             hiddenInput.name = 'delete_image_' + fieldId;
             hiddenInput.value = filename;
+            // Move input to form so it gets submitted (item.remove() would otherwise remove it)
+            const form = document.getElementById('entityForm');
+            if (form) {
+                form.appendChild(hiddenInput);
+            }
         }
         
         // Add fade-out animation and then remove the element
@@ -207,10 +319,177 @@ document.querySelectorAll('.image-delete-btn').forEach(btn => {
         item.style.opacity = '0';
         item.style.transform = 'scale(0.8)';
         
-        // Remove the element after animation
+        // Remove the element after animation (hidden input already moved to form)
         setTimeout(() => {
             item.remove();
         }, 300);
+    });
+});
+
+// Handle single image deletion (image field)
+document.querySelectorAll('.image-single-delete-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const fieldId = this.getAttribute('data-field-id');
+        const previewDiv = document.getElementById(`image_preview_${fieldId}`);
+        const clearInput = document.getElementById(`clear_image_${fieldId}`);
+        const fileInput = document.getElementById(`field_${fieldId}`);
+        
+        if (!previewDiv || !clearInput) return;
+        
+        // Mark image for deletion
+        clearInput.value = '1';
+        
+        // Add fade-out animation and then hide the preview
+        previewDiv.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        previewDiv.style.opacity = '0';
+        previewDiv.style.transform = 'scale(0.8)';
+        
+        setTimeout(() => {
+            previewDiv.style.display = 'none';
+        }, 300);
+        
+        // Clear file input and add required if field was required
+        if (fileInput) {
+            fileInput.value = '';
+            if (fileInput.dataset.required === 'true') {
+                fileInput.required = true;
+            }
+        }
+    });
+});
+
+// Video embed management
+const videoEmbeds = {};
+
+function addVideoEmbed(fieldId) {
+    const input = document.getElementById(`video_embed_input_${fieldId}`);
+    const list = document.getElementById(`video_embed_list_${fieldId}`);
+    const hiddenInput = document.getElementById(`field_${fieldId}`);
+    
+    if (!input || !list || !hiddenInput) return;
+    
+    let embedUrl = input.value.trim();
+    if (!embedUrl) {
+        alert('Please enter an embed URL');
+        return;
+    }
+    
+    // Normalize YouTube URLs
+    if (embedUrl.includes('youtube.com/watch') || embedUrl.includes('youtu.be/')) {
+        let videoId = '';
+        if (embedUrl.includes('youtube.com/watch')) {
+            const match = embedUrl.match(/[?&]v=([^&]+)/);
+            videoId = match ? match[1] : '';
+        } else if (embedUrl.includes('youtu.be/')) {
+            videoId = embedUrl.split('youtu.be/')[1].split('?')[0];
+        }
+        if (videoId) {
+            embedUrl = `https://www.youtube.com/embed/${videoId}`;
+        }
+    }
+    
+    // Normalize Vimeo URLs
+    if (embedUrl.includes('vimeo.com/') && !embedUrl.includes('/embed/') && !embedUrl.includes('/video/')) {
+        const match = embedUrl.match(/vimeo\.com\/(\d+)/);
+        if (match) {
+            embedUrl = `https://player.vimeo.com/video/${match[1]}`;
+        }
+    }
+    
+    // Initialize array if needed
+    if (!videoEmbeds[fieldId]) {
+        videoEmbeds[fieldId] = [];
+    }
+    
+    // Add to list
+    videoEmbeds[fieldId].push(embedUrl);
+    updateVideoEmbedList(fieldId);
+    
+    // Clear input
+    input.value = '';
+}
+
+function removeVideoEmbed(fieldId, index) {
+    if (videoEmbeds[fieldId]) {
+        videoEmbeds[fieldId].splice(index, 1);
+        updateVideoEmbedList(fieldId);
+    }
+}
+
+function updateVideoEmbedList(fieldId) {
+    const list = document.getElementById(`video_embed_list_${fieldId}`);
+    const hiddenInput = document.getElementById(`field_${fieldId}`);
+    
+    if (!list || !hiddenInput) return;
+    
+    list.innerHTML = '';
+    
+    if (videoEmbeds[fieldId] && videoEmbeds[fieldId].length > 0) {
+        videoEmbeds[fieldId].forEach((url, index) => {
+            const item = document.createElement('div');
+            item.className = 'mb-3 p-3 border rounded position-relative';
+            item.style.backgroundColor = '#f8f9fa';
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn btn-sm btn-danger position-absolute top-0 end-0 m-2';
+            removeBtn.innerHTML = '×';
+            removeBtn.onclick = () => removeVideoEmbed(fieldId, index);
+            
+            const preview = document.createElement('div');
+            preview.className = 'ratio ratio-16x9';
+            preview.style.maxWidth = '400px';
+            const iframe = document.createElement('iframe');
+            iframe.src = url;
+            iframe.allowFullscreen = true;
+            iframe.frameBorder = '0';
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            preview.appendChild(iframe);
+            
+            item.appendChild(removeBtn);
+            item.appendChild(preview);
+            list.appendChild(item);
+        });
+        
+        // Update hidden input with JSON
+        hiddenInput.value = JSON.stringify(videoEmbeds[fieldId]);
+    } else {
+        hiddenInput.value = '';
+    }
+}
+
+// Load existing video embeds on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize video embeds from existing values
+    document.querySelectorAll('[id^="video_embed_container_"]').forEach(container => {
+        const fieldId = container.id.replace('video_embed_container_', '');
+        const hiddenInput = document.getElementById(`field_${fieldId}`);
+        if (hiddenInput && hiddenInput.value) {
+            try {
+                const existingEmbeds = JSON.parse(hiddenInput.value);
+                if (Array.isArray(existingEmbeds)) {
+                    videoEmbeds[fieldId] = existingEmbeds;
+                    updateVideoEmbedList(parseInt(fieldId));
+                }
+            } catch (e) {
+                console.error('Error parsing existing video embeds:', e);
+            }
+        }
+    });
+    
+    // Allow Enter key to add video
+    document.querySelectorAll('.video-embed-input').forEach(input => {
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const fieldId = this.getAttribute('data-field-id');
+                addVideoEmbed(parseInt(fieldId));
+            }
+        });
     });
 });
 </script>

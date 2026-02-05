@@ -22,6 +22,16 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/dashboard">Dashboard</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/newsfeed">
+                            <i class="bi bi-people"></i> Switch to Other
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/profile">
+                            <i class="bi bi-person-circle"></i> My Profile
+                        </a>
+                    </li>
                     {% if session.user_id and is_admin %}
                     <li class="nav-item">
                         <a class="nav-link" href="/admin">

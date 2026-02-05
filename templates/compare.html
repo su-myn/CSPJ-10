@@ -168,6 +168,20 @@
     .compare-field.image-album-field .field-value {
         width: 100%;
     }
+    .compare-field.video-embed-field {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .compare-field.video-embed-field .field-label {
+        margin-right: 0;
+        margin-bottom: 8px;
+    }
+    .compare-field.video-embed-field .field-label::after {
+        content: '';
+    }
+    .compare-field.video-embed-field .field-value {
+        width: 100%;
+    }
     .tag-badge {
         display: inline-block;
         margin: 2px;
@@ -196,14 +210,20 @@
             grid-template-columns: 1fr;
         }
     }
-    /* Image album styling for compare page - 3 photos per row */
+    /* Image album styling for compare page - auto-fit to container width */
     .compare-field .image-album-container {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(auto-fill, 100px);
         gap: 8px;
+        justify-content: start;
+    }
+    .compare-field .image-album-item {
+        width: 100px;
+        height: 100px;
+        overflow: hidden;
     }
     .compare-field .image-album-img {
         height: 100px;
-        width: 100%;
+        width: 100px;
         object-fit: cover;
         cursor: pointer;
         transition: opacity 0.2s;
@@ -213,11 +233,36 @@
     }
     @media (max-width: 768px) {
         .compare-field .image-album-container {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(auto-fill, 80px);
+        }
+        .compare-field .image-album-item {
+            width: 80px;
+            height: 80px;
         }
         .compare-field .image-album-img {
             height: 80px;
+            width: 80px;
         }
+    }
+    /* Image modal navigation buttons */
+    #prevImageBtn, #nextImageBtn {
+        background-color: rgba(0, 0, 0, 0.5);
+        border: 2px solid rgba(255, 255, 255, 0.8);
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+    #prevImageBtn:hover, #nextImageBtn:hover {
+        background-color: rgba(0, 0, 0, 0.7);
+        border-color: rgba(255, 255, 255, 1);
+        transform: scale(1.1);
+    }
+    #prevImageBtn i, #nextImageBtn i {
+        color: white;
     }
 </style>
 {% endblock %}
@@ -225,7 +270,12 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Compare: {{ category.name }} ({{ num_entities }} {{ 'entity' if num_entities == 1 else 'entities' }})</h1>
-    <a href="/category/{{ category.id }}" class="btn btn-secondary">Back to Category</a>
+    <div>
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#shareModal">
+            <i class="bi bi-share"></i> Share
+        </button>
+        <a href="/category/{{ category.id }}" class="btn btn-secondary">Back to Category</a>
+    </div>
 </div>
 
 <div class="compare-container">
@@ -236,7 +286,7 @@
             <div class="entity-name">{{ entity_data.entity.name }}</div>
             {% if entity_data.primary_image %}
             <div class="compare-image-wrapper">
-                <img src="{{ url_for('static', filename='uploads/' + entity_data.primary_image) }}" alt="{{ entity_data.entity.name }}" class="compare-image" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + entity_data.primary_image) }}" onclick="showImageModal(this.getAttribute('data-image-src'))">
+                <img src="{{ entity_data.primary_image|thumbnail_url(300) }}" alt="{{ entity_data.entity.name }}" class="compare-image" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + entity_data.primary_image) }}" onclick="showImageModal(this.getAttribute('data-image-src'))" loading="lazy">
             </div>
             {% endif %}
         </div>
@@ -271,7 +321,7 @@
     <div class="field-row">
         {% for entity_data in entities_data %}
         <div class="field-cell">
-            <div class="compare-field{% if field.field_type == 'textarea' %} textarea-field{% elif field.field_type == 'image_album' %} image-album-field{% endif %}" data-field-id="{{ field.id }}">
+                <div class="compare-field{% if field.field_type == 'textarea' %} textarea-field{% elif field.field_type == 'image_album' %} image-album-field{% elif field.field_type == 'video_embed' %} video-embed-field{% endif %}" data-field-id="{{ field.id }}">
                 <div class="field-label">{{ field.label }}</div>
                 {% set field_id_int = field.id|int %}
                 {% set raw_value = entity_data.field_values.get(field_id_int, '') or entity_data.field_values.get(field.id, '') or '' %}
@@ -304,15 +354,30 @@
                             {% elif field.field_type == 'image_album' %}
                             {% set image_list = value|from_json if value else [] %}
                             {% if image_list %}
-                            <div class="image-album-container">
+                            <div class="image-album-container" data-album-images='{{ image_list|tojson }}'>
                                 {% for img_filename in image_list %}
                                 <div class="image-album-item">
-                                    <img src="{{ url_for('static', filename='uploads/' + img_filename) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + img_filename) }}" onclick="showImageModal(this.getAttribute('data-image-src'))">
+                                    <img src="{{ img_filename|thumbnail_url(100) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + img_filename) }}" data-image-index="{{ loop.index0 }}" onclick="showImageModal(this)" loading="lazy">
                                 </div>
                                 {% endfor %}
                             </div>
                             {% else %}
                             <span class="text-muted">No images</span>
+                            {% endif %}
+                            {% elif field.field_type == 'video_embed' %}
+                            {% set video_list = value|from_json if value else [] %}
+                            {% if video_list %}
+                            <div class="video-embed-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+                                {% for embed_url in video_list %}
+                                <div class="video-embed-item">
+                                    <div class="ratio ratio-16x9">
+                                        <iframe src="{{ embed_url }}" allowfullscreen frameborder="0" style="width: 100%; height: 100%;"></iframe>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="text-muted">No videos</span>
                             {% endif %}
                             {% else %}
                             {{ value }}
@@ -374,10 +439,115 @@ window.addEventListener('load', syncFieldHeights);
 // Run again after a short delay to ensure everything is rendered
 setTimeout(syncFieldHeights, 100);
 
+// Image modal navigation variables
+let currentImageList = [];
+let currentImageIndex = 0;
+
 // Image modal function
-function showImageModal(imageSrc) {
-    document.getElementById('modalImage').src = imageSrc;
+function showImageModal(imgElement) {
+    const imageSrc = imgElement.getAttribute('data-image-src');
+    const imageIndex = parseInt(imgElement.getAttribute('data-image-index'));
+    
+    // Find the album container and get all images
+    const albumContainer = imgElement.closest('.image-album-container');
+    if (albumContainer) {
+        const albumImagesJson = albumContainer.getAttribute('data-album-images');
+        if (albumImagesJson) {
+            try {
+                currentImageList = JSON.parse(albumImagesJson);
+                currentImageIndex = imageIndex;
+                
+                // Convert to full URLs
+                currentImageList = currentImageList.map(filename => 
+                    '/static/uploads/' + filename
+                );
+                
+                updateModalImage();
+            } catch (e) {
+                console.error('Error parsing album images:', e);
+                // Fallback to single image
+                currentImageList = [imageSrc];
+                currentImageIndex = 0;
+                updateModalImage();
+            }
+        } else {
+            // Fallback if no album data
+            currentImageList = [imageSrc];
+            currentImageIndex = 0;
+            updateModalImage();
+        }
+    } else {
+        // Fallback if no container found
+        currentImageList = [imageSrc];
+        currentImageIndex = 0;
+        updateModalImage();
+    }
 }
+
+// Update modal image display
+function updateModalImage() {
+    const modalImage = document.getElementById('modalImage');
+    const modalTitle = document.getElementById('modalImageTitle');
+    const prevBtn = document.getElementById('prevImageBtn');
+    const nextBtn = document.getElementById('nextImageBtn');
+    
+    if (currentImageList.length > 0 && currentImageIndex >= 0 && currentImageIndex < currentImageList.length) {
+        modalImage.src = currentImageList[currentImageIndex];
+        modalTitle.textContent = `Image ${currentImageIndex + 1} of ${currentImageList.length}`;
+        
+        // Show/hide navigation buttons
+        if (currentImageList.length > 1) {
+            prevBtn.style.display = currentImageIndex > 0 ? 'block' : 'none';
+            nextBtn.style.display = currentImageIndex < currentImageList.length - 1 ? 'block' : 'none';
+        } else {
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'none';
+        }
+    }
+}
+
+// Navigate to previous/next image
+function navigateImage(direction) {
+    if (currentImageList.length === 0) return;
+    
+    currentImageIndex += direction;
+    
+    // Wrap around (optional - you can remove this if you don't want wrapping)
+    // if (currentImageIndex < 0) {
+    //     currentImageIndex = currentImageList.length - 1;
+    // } else if (currentImageIndex >= currentImageList.length) {
+    //     currentImageIndex = 0;
+    // }
+    
+    // Don't wrap, just clamp
+    if (currentImageIndex < 0) {
+        currentImageIndex = 0;
+    } else if (currentImageIndex >= currentImageList.length) {
+        currentImageIndex = currentImageList.length - 1;
+    }
+    
+    updateModalImage();
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+    const modal = document.getElementById('imageModal');
+    if (modal && modal.classList.contains('show')) {
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            navigateImage(-1);
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            navigateImage(1);
+        } else if (e.key === 'Escape') {
+            // Bootstrap modal handles Escape by default, but we can ensure it works
+            const bsModal = bootstrap.Modal.getInstance(modal);
+            if (bsModal) {
+                bsModal.hide();
+            }
+        }
+    }
+});
 </script>
 {% endblock %}
 
@@ -386,13 +556,97 @@ function showImageModal(imageSrc) {
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Image</h5>
+                <h5 class="modal-title" id="modalImageTitle">Image</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body text-center">
-                <img id="modalImage" src="" alt="Image" class="img-fluid">
+            <div class="modal-body text-center position-relative" style="min-height: 400px;">
+                <button type="button" class="btn btn-outline-light position-absolute start-0 top-50 translate-middle-y ms-2" id="prevImageBtn" style="z-index: 10; display: none;" onclick="navigateImage(-1)">
+                    <i class="bi bi-chevron-left" style="font-size: 2rem;"></i>
+                </button>
+                <img id="modalImage" src="" alt="Image" class="img-fluid" style="max-height: 70vh;">
+                <button type="button" class="btn btn-outline-light position-absolute end-0 top-50 translate-middle-y me-2" id="nextImageBtn" style="z-index: 10; display: none;" onclick="navigateImage(1)">
+                    <i class="bi bi-chevron-right" style="font-size: 2rem;"></i>
+                </button>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Share Modal -->
+<div class="modal fade" id="shareModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Share Entity Comparison</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="/category/{{ category.id }}/share">
+                <div class="modal-body">
+                    {% for i in range(1, num_entities + 1) %}
+                    <input type="hidden" name="entity{{ i }}" value="{{ entities_data[i-1].entity.id }}">
+                    {% endfor %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Share with:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="share_type" id="sharePublic" value="public" checked onchange="toggleCustomUser()">
+                            <label class="form-check-label" for="sharePublic">
+                                Public (Everyone can see)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="share_type" id="shareFriend" value="friend" onchange="toggleCustomUser()">
+                            <label class="form-check-label" for="shareFriend">
+                                Friends Only
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="share_type" id="shareCustom" value="custom" onchange="toggleCustomUser()">
+                            <label class="form-check-label" for="shareCustom">
+                                Specific User
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="customUserDiv" style="display: none;">
+                        <label for="shared_to_user_id" class="form-label">Select User:</label>
+                        <select class="form-select" name="shared_to_user_id" id="shared_to_user_id">
+                            <option value="">-- Select User --</option>
+                            {% for user in all_users %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    {% if is_shared %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> This comparison is already shared. Updating share settings will modify the existing share.
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Share</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleCustomUser() {
+    const customRadio = document.getElementById('shareCustom');
+    const customUserDiv = document.getElementById('customUserDiv');
+    const customUserSelect = document.getElementById('shared_to_user_id');
+    
+    if (customRadio.checked) {
+        customUserDiv.style.display = 'block';
+        customUserSelect.required = true;
+    } else {
+        customUserDiv.style.display = 'none';
+        customUserSelect.required = false;
+        customUserSelect.value = '';
+    }
+}
+</script>
 {% endblock %}
