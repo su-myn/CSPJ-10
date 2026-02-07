@@ -1,4 +1,4 @@
-// Main JavaScript for Personal Database App
+// Main JavaScript for Discoverico App
 
 // Auto-dismiss alerts after 5 seconds
 document.addEventListener('DOMContentLoaded', function() {

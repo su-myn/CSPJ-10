@@ -1,4 +1,4 @@
-# Personal Database App
+# Discoverico App
 
 A Flask-based personal database application that allows users to organize and manage various types of entities (classmates, lecturers, pets, favorite millionaires, etc.) with custom fields, tags, filtering, sorting, and comparison features.
 
