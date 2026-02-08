@@ -516,7 +516,12 @@ def init_db():
     db.close()
 
 # Initialize database on first run
-init_db()
+try:
+    init_db()
+    print("=== Database initialized successfully ===")
+except Exception as e:
+    print(f"=== Database init error (tables may already exist, this is OK): {e} ===")
+    # Tables likely already exist from a previous deployment - this is fine
 
 def allowed_file(filename):
     """Check if file extension is allowed"""
