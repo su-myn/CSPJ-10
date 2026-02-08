@@ -65,10 +65,14 @@ def inject_is_admin():
 
 # Database helper functions
 class PostgresRow:
-    """Make PostgreSQL rows work like SQLite rows"""
+    """Make PostgreSQL rows work like SQLite rows (supports both row['name'] and row[0])"""
     def __init__(self, data):
         self._data = dict(data)
+        self._keys = list(self._data.keys())
     def __getitem__(self, key):
+        if isinstance(key, int):
+            # Support integer index access like SQLite rows: row[0], row[1], etc.
+            return self._data[self._keys[key]]
         return self._data[key]
     def __contains__(self, key):
         return key in self._data
@@ -78,6 +82,8 @@ class PostgresRow:
         return self._data.keys()
     def __iter__(self):
         return iter(self._data)
+    def __len__(self):
+        return len(self._data)
     def __getattr__(self, name):
         return self._data.get(name)
 
