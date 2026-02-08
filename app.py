@@ -548,9 +548,68 @@ def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def compress_image_to_bytes(file_storage, max_size_kb=400, max_dimension=1920):
+    """
+    Compress an uploaded image to maximum 400 KB JPEG with no visible quality loss.
+    
+    Args:
+        file_storage: Flask FileStorage object (from request.files)
+        max_size_kb: Maximum file size in KB (default 400)
+        max_dimension: Maximum dimension (width or height) in pixels (default 1920)
+    
+    Returns:
+        Compressed image as bytes (JPEG format)
+    """
+    img = Image.open(file_storage)
+    
+    # Convert to RGB if necessary (for PNG/GIF with transparency)
+    if img.mode in ('RGBA', 'LA', 'P'):
+        background = Image.new('RGB', img.size, (255, 255, 255))
+        if img.mode == 'P':
+            img = img.convert('RGBA')
+        background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+        img = background
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+    
+    # Resize if image is too large
+    width, height = img.size
+    if width > max_dimension or height > max_dimension:
+        if width > height:
+            new_width = max_dimension
+            new_height = int(height * (max_dimension / width))
+        else:
+            new_height = max_dimension
+            new_width = int(width * (max_dimension / height))
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    
+    # Binary search for optimal quality to get under max_size_kb
+    max_size_bytes = max_size_kb * 1024
+    min_quality = 60
+    max_quality = 95
+    optimal_quality = 85
+    
+    while min_quality <= max_quality:
+        mid_quality = (min_quality + max_quality) // 2
+        buffer = io.BytesIO()
+        img.save(buffer, 'JPEG', quality=mid_quality, optimize=True)
+        file_size = buffer.tell()
+        
+        if file_size <= max_size_bytes:
+            optimal_quality = mid_quality
+            min_quality = mid_quality + 1
+        else:
+            max_quality = mid_quality - 1
+    
+    # Save final image with optimal quality
+    output = io.BytesIO()
+    img.save(output, 'JPEG', quality=optimal_quality, optimize=True)
+    output.seek(0)
+    return output.read()
+
 def upload_to_cloudinary(file_storage, public_id=None):
     """
-    Upload an image to Cloudinary with automatic compression and optimization.
+    Compress image to max 400KB JPEG, then upload to Cloudinary.
     
     Args:
         file_storage: Flask FileStorage object (from request.files)
@@ -560,11 +619,11 @@ def upload_to_cloudinary(file_storage, public_id=None):
         (secure_url, public_id) tuple on success, (None, None) on failure
     """
     try:
-        # Read file into bytes so we can pass it cleanly
-        file_bytes = file_storage.read()
+        # Compress image to max 400KB JPEG before uploading
+        compressed_bytes = compress_image_to_bytes(file_storage)
         
         result = cloudinary.uploader.upload(
-            file_bytes,
+            compressed_bytes,
             folder="cspj",
             resource_type="image"
         )
