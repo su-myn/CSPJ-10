@@ -61,7 +61,8 @@ def thumbnail_url_filter(filename, size=100):
     # Cloudinary URL - insert resize transformation
     if filename.startswith("http"):
         # Insert transformation between /upload/ and the version/path
-        return filename.replace("/upload/", f"/upload/c_fill,w_{size},h_{size}/")
+        # Also add quality auto and format auto for optimization
+        return filename.replace("/upload/", f"/upload/c_fill,w_{size},h_{size},q_auto,f_auto/")
     
     # Fallback for old local filenames
     base_name = os.path.splitext(filename)[0]
@@ -77,9 +78,9 @@ def image_url_filter(filename):
     """Get full-size image URL - supports Cloudinary URLs and local filenames"""
     if not filename:
         return ''
-    # Cloudinary URL - return as-is
+    # Cloudinary URL - add optimization (limit to 1920px, auto quality/format)
     if filename.startswith("http"):
-        return filename
+        return filename.replace("/upload/", "/upload/c_limit,w_1920,h_1920,q_auto,f_auto/")
     # Old local filename - construct static URL
     return url_for('static', filename=f"uploads/{filename}")
 
@@ -543,10 +544,6 @@ def upload_to_cloudinary(file_storage, public_id=None):
         upload_options = {
             "overwrite": True,
             "resource_type": "image",
-            "transformation": [
-                {"width": 1920, "height": 1920, "crop": "limit"},  # Max dimension 1920px
-                {"quality": "auto:good", "fetch_format": "auto"}   # Auto-compress
-            ]
         }
         if public_id:
             upload_options["public_id"] = public_id
@@ -4034,10 +4031,6 @@ def admin_import_user(user_id):
                                 public_id=public_id,
                                 overwrite=True,
                                 resource_type="image",
-                                transformation=[
-                                    {"width": 1920, "height": 1920, "crop": "limit"},
-                                    {"quality": "auto:good", "fetch_format": "auto"}
-                                ]
                             )
                             if result.get("secure_url"):
                                 image_map[rel_path] = result["secure_url"]

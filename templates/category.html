@@ -577,7 +577,7 @@ function filterEntities() {
                     let thumbUrl, fullUrl;
                     if (item.primary_image.startsWith('http')) {
                         // Cloudinary URL - use transformation for thumbnail
-                        thumbUrl = item.primary_image.replace('/upload/', '/upload/c_fill,w_500,h_500/');
+                        thumbUrl = item.primary_image.replace('/upload/', '/upload/c_fill,w_500,h_500,q_auto,f_auto/');
                         fullUrl = item.primary_image;
                     } else {
                         // Local filename fallback
