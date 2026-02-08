@@ -100,7 +100,7 @@
                         {% elif field.field_type == 'image' %}
                         {% if current_value %}
                         <div class="mb-2 position-relative d-inline-block" id="image_preview_{{ field.id }}">
-                            <img src="{{ url_for('static', filename='uploads/' + current_value) }}" alt="{{ field.label }}" class="entity-image" loading="lazy">
+                            <img src="{{ current_value|image_url }}" alt="{{ field.label }}" class="entity-image" loading="lazy">
                             <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 image-single-delete-btn" data-field-id="{{ field.id }}" style="padding: 2px 6px; font-size: 0.7rem; z-index: 10;">×</button>
                             <p class="small text-muted">Current image</p>
                         </div>

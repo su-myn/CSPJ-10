@@ -162,7 +162,7 @@
                 <div class="entity-name">{{ entity_data.entity.name }}</div>
                 {% if entity_data.primary_image %}
                 <div class="text-center mt-2">
-                    <img src="{{ entity_data.primary_image|thumbnail_url(300) }}" alt="{{ entity_data.entity.name }}" class="compare-image" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + entity_data.primary_image) }}" onclick="showImageModal(this.getAttribute('data-image-src'))" loading="lazy">
+                    <img src="{{ entity_data.primary_image|thumbnail_url(300) }}" alt="{{ entity_data.entity.name }}" class="compare-image" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ entity_data.primary_image|image_url }}" onclick="showImageModal(this.getAttribute('data-image-src'))" loading="lazy">
                 </div>
                 {% endif %}
             </div>
@@ -216,7 +216,7 @@
                             {% if image_list %}
                             <div class="d-flex flex-wrap gap-2">
                                 {% for img_filename in image_list %}
-                                <img src="{{ img_filename|thumbnail_url(100) }}" alt="{{ field.label }}" class="img-thumbnail" style="max-width: 100px; max-height: 100px; object-fit: cover;" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + img_filename) }}" onclick="showImageModal(this.getAttribute('data-image-src'))" loading="lazy">
+                                <img src="{{ img_filename|thumbnail_url(100) }}" alt="{{ field.label }}" class="img-thumbnail" style="max-width: 100px; max-height: 100px; object-fit: cover;" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ img_filename|image_url }}" onclick="showImageModal(this.getAttribute('data-image-src'))" loading="lazy">
                                 {% endfor %}
                             </div>
                             {% else %}

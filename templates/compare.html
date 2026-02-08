@@ -286,7 +286,7 @@
             <div class="entity-name">{{ entity_data.entity.name }}</div>
             {% if entity_data.primary_image %}
             <div class="compare-image-wrapper">
-                <img src="{{ entity_data.primary_image|thumbnail_url(300) }}" alt="{{ entity_data.entity.name }}" class="compare-image" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + entity_data.primary_image) }}" onclick="showImageModal(this.getAttribute('data-image-src'))" loading="lazy">
+                <img src="{{ entity_data.primary_image|thumbnail_url(300) }}" alt="{{ entity_data.entity.name }}" class="compare-image" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ entity_data.primary_image|image_url }}" onclick="showImageModal(this.getAttribute('data-image-src'))" loading="lazy">
             </div>
             {% endif %}
         </div>
@@ -357,7 +357,7 @@
                             <div class="image-album-container" data-album-images='{{ image_list|tojson }}'>
                                 {% for img_filename in image_list %}
                                 <div class="image-album-item">
-                                    <img src="{{ img_filename|thumbnail_url(100) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + img_filename) }}" data-image-index="{{ loop.index0 }}" onclick="showImageModal(this)" loading="lazy">
+                                    <img src="{{ img_filename|thumbnail_url(100) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ img_filename|image_url }}" data-image-index="{{ loop.index0 }}" onclick="showImageModal(this)" loading="lazy">
                                 </div>
                                 {% endfor %}
                             </div>
@@ -457,9 +457,9 @@ function showImageModal(imgElement) {
                 currentImageList = JSON.parse(albumImagesJson);
                 currentImageIndex = imageIndex;
                 
-                // Convert to full URLs
+                // Convert to full URLs (handle both Cloudinary URLs and local filenames)
                 currentImageList = currentImageList.map(filename => 
-                    '/static/uploads/' + filename
+                    filename.startsWith('http') ? filename : '/static/uploads/' + filename
                 );
                 
                 updateModalImage();

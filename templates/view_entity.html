@@ -83,7 +83,7 @@
                     {% elif field.field_type == 'image' %}
                     <div class="field-value text-center">
                         {% if current_value %}
-                        <img src="{{ url_for('static', filename='uploads/' + current_value) }}" alt="{{ field.label }}" class="img-fluid rounded" style="max-width: 100%; max-height: 600px; object-fit: contain;" loading="lazy">
+                        <img src="{{ current_value|image_url }}" alt="{{ field.label }}" class="img-fluid rounded" style="max-width: 100%; max-height: 600px; object-fit: contain;" loading="lazy">
                         {% else %}
                         <span class="text-muted">No image</span>
                         {% endif %}
@@ -97,7 +97,7 @@
                         <div class="image-album-container" data-album-images='{{ image_list|tojson }}'>
                             {% for img_filename in image_list %}
                             <div class="image-album-item">
-                                <img src="{{ img_filename|thumbnail_url(100) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ url_for('static', filename='uploads/' + img_filename) }}" data-image-index="{{ loop.index0 }}" onclick="showImageModal(this)" loading="lazy">
+                                <img src="{{ img_filename|thumbnail_url(100) }}" alt="{{ field.label }}" class="img-fluid rounded image-album-img" data-bs-toggle="modal" data-bs-target="#imageModal" data-image-src="{{ img_filename|image_url }}" data-image-index="{{ loop.index0 }}" onclick="showImageModal(this)" loading="lazy">
                             </div>
                             {% endfor %}
                         </div>
@@ -221,9 +221,9 @@ function showImageModal(imgElement) {
                 currentImageList = JSON.parse(albumImagesJson);
                 currentImageIndex = imageIndex;
                 
-                // Convert to full URLs
+                // Convert to full URLs (handle both Cloudinary URLs and local filenames)
                 currentImageList = currentImageList.map(filename => 
-                    '/static/uploads/' + filename
+                    filename.startsWith('http') ? filename : '/static/uploads/' + filename
                 );
                 
                 updateModalImage();

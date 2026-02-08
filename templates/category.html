@@ -574,9 +574,17 @@ function filterEntities() {
                 // Generate image HTML - show image if available, otherwise placeholder
                 let imageHtml = '';
                 if (item.primary_image) {
-                    const baseName = item.primary_image.replace(/\.[^/.]+$/, '');
-                    const thumbUrl = `/static/uploads/thumbnails/${baseName}_thumb500.jpg`;
-                    const fullUrl = `/static/uploads/${item.primary_image}`;
+                    let thumbUrl, fullUrl;
+                    if (item.primary_image.startsWith('http')) {
+                        // Cloudinary URL - use transformation for thumbnail
+                        thumbUrl = item.primary_image.replace('/upload/', '/upload/c_fill,w_500,h_500/');
+                        fullUrl = item.primary_image;
+                    } else {
+                        // Local filename fallback
+                        const baseName = item.primary_image.replace(/\.[^/.]+$/, '');
+                        thumbUrl = `/static/uploads/thumbnails/${baseName}_thumb500.jpg`;
+                        fullUrl = `/static/uploads/${item.primary_image}`;
+                    }
                     imageHtml = `<a href="/category/${categoryId}/entity/${item.id}" style="text-decoration: none; display: block;">
                         <div class="entity-image-container" style="cursor: pointer;">
                             <img src="${thumbUrl}" alt="${item.name}" class="entity-card-image" onerror="this.onerror=null; this.src='${fullUrl}'">

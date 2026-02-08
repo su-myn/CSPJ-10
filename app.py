@@ -12,6 +12,9 @@ import csv
 import io
 from urllib.parse import urlparse
 from PIL import Image
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
 
 # Configure application
 app = Flask(__name__)
@@ -19,14 +22,22 @@ app = Flask(__name__)
 # Configure session to use signed cookies (persists across deploys)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
-# Configure upload folder
+# Configure Cloudinary (reads CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET from env)
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+    secure=True
+)
+
+# Configure upload folder (kept as fallback for local development)
 UPLOAD_FOLDER = 'static/uploads'
 THUMBNAIL_FOLDER = os.path.join(UPLOAD_FOLDER, 'thumbnails')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Ensure upload directory exists
+# Ensure upload directory exists (for local dev fallback)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(THUMBNAIL_FOLDER, exist_ok=True)
 
@@ -43,15 +54,33 @@ def from_json_filter(value):
 
 @app.template_filter('thumbnail_url')
 def thumbnail_url_filter(filename, size=100):
-    """Get thumbnail URL for an image filename"""
+    """Get thumbnail URL for an image - supports Cloudinary URLs and local filenames"""
     if not filename:
         return ''
+    
+    # Cloudinary URL - insert resize transformation
+    if filename.startswith("http"):
+        # Insert transformation between /upload/ and the version/path
+        return filename.replace("/upload/", f"/upload/c_fill,w_{size},h_{size}/")
+    
+    # Fallback for old local filenames
     base_name = os.path.splitext(filename)[0]
     thumbnail_filename = f"{base_name}_thumb{size}.jpg"
     thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail_filename)
     if os.path.exists(thumbnail_path):
         return url_for('static', filename=f"uploads/thumbnails/{thumbnail_filename}")
     # Fallback to original if thumbnail doesn't exist
+    return url_for('static', filename=f"uploads/{filename}")
+
+@app.template_filter('image_url')
+def image_url_filter(filename):
+    """Get full-size image URL - supports Cloudinary URLs and local filenames"""
+    if not filename:
+        return ''
+    # Cloudinary URL - return as-is
+    if filename.startswith("http"):
+        return filename
+    # Old local filename - construct static URL
     return url_for('static', filename=f"uploads/{filename}")
 
 # Context processor to make is_admin available in all templates
@@ -499,161 +528,78 @@ def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def delete_image_and_thumbnails(filename):
+def upload_to_cloudinary(file_storage, public_id=None):
     """
-    Delete an image file and all its associated thumbnails.
+    Upload an image to Cloudinary with automatic compression and optimization.
     
     Args:
-        filename: The filename of the image to delete
+        file_storage: Flask FileStorage object (from request.files)
+        public_id: Optional public_id for the image in Cloudinary
+    
+    Returns:
+        (secure_url, public_id) tuple on success, (None, None) on failure
+    """
+    try:
+        upload_options = {
+            "overwrite": True,
+            "resource_type": "image",
+            "transformation": [
+                {"width": 1920, "height": 1920, "crop": "limit"},  # Max dimension 1920px
+                {"quality": "auto:good", "fetch_format": "auto"}   # Auto-compress
+            ]
+        }
+        if public_id:
+            upload_options["public_id"] = public_id
+        
+        result = cloudinary.uploader.upload(file_storage, **upload_options)
+        return result.get("secure_url"), result.get("public_id")
+    except Exception as e:
+        print(f"Cloudinary upload error: {str(e)}")
+        return None, None
+
+def delete_from_cloudinary(image_value):
+    """
+    Delete an image from Cloudinary.
+    
+    Args:
+        image_value: The Cloudinary URL or public_id of the image to delete.
+                     Also handles old local filenames gracefully (no-op).
     
     Returns:
         None (silently handles errors)
     """
-    if not filename:
+    if not image_value:
         return
     
     try:
-        # Delete main image file
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        
-        # Delete thumbnails (100px, 300px, and 500px)
-        base_name = os.path.splitext(filename)[0]
-        thumbnail_sizes = [100, 300, 500]
-        for size in thumbnail_sizes:
-            thumbnail_filename = f"{base_name}_thumb{size}.jpg"
-            thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail_filename)
-            if os.path.exists(thumbnail_path):
-                try:
-                    os.remove(thumbnail_path)
-                except Exception as e:
-                    # Log error in development (Flask debug mode)
-                    if app.debug:
-                        print(f"Error deleting thumbnail {thumbnail_filename}: {str(e)}")
-    except Exception as e:
-        # Log error in development (Flask debug mode)
-        if app.debug:
-            print(f"Error deleting image {filename}: {str(e)}")
-
-def generate_thumbnail(input_path, output_path, size=100, quality=85):
-    """
-    Generate a thumbnail version of an image.
-    
-    Args:
-        input_path: Path to the input image file
-        output_path: Path to save the thumbnail
-        size: Maximum dimension (width or height) in pixels (default 100)
-        quality: JPEG quality (default 85)
-    
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        img = Image.open(input_path)
-        
-        # Convert to RGB if necessary
-        if img.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
-            img = background
-        elif img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        # Calculate thumbnail size maintaining aspect ratio
-        width, height = img.size
-        if width > height:
-            new_width = size
-            new_height = int(height * (size / width))
+        # If it's a Cloudinary URL, extract the public_id
+        if image_value.startswith("http"):
+            # URL format: https://res.cloudinary.com/CLOUD/image/upload/v123/folder/filename.ext
+            parts = image_value.split("/upload/")
+            if len(parts) < 2:
+                return
+            path = parts[1]
+            # Remove version prefix (v1234567890/) if present
+            if path.startswith("v") and "/" in path:
+                path = path.split("/", 1)[1]
+            # Remove file extension to get public_id
+            public_id = os.path.splitext(path)[0]
         else:
-            new_height = size
-            new_width = int(width * (size / height))
+            # Old local filename - also try to delete local file as fallback
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], image_value)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            # Delete local thumbnails too
+            base_name = os.path.splitext(image_value)[0]
+            for size in [100, 300, 500]:
+                thumb_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb{size}.jpg")
+                if os.path.exists(thumb_path):
+                    os.remove(thumb_path)
+            return
         
-        # Resize image
-        img.thumbnail((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        # Save thumbnail
-        img.save(output_path, 'JPEG', quality=quality, optimize=True)
-        return True
+        cloudinary.uploader.destroy(public_id)
     except Exception as e:
-        print(f"Thumbnail generation error: {str(e)}")
-        return False
-
-def compress_image(input_path, output_path, max_size_kb=400, max_dimension=1920):
-    """
-    Compress image to maximum 400 KB JPEG format with no visible quality loss.
-    
-    Args:
-        input_path: Path to the input image file
-        output_path: Path to save the compressed JPEG file
-        max_size_kb: Maximum file size in KB (default 400)
-        max_dimension: Maximum dimension (width or height) in pixels (default 1920)
-    
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        # Open and process the image
-        img = Image.open(input_path)
-        
-        # Convert to RGB if necessary (for PNG/GIF with transparency)
-        if img.mode in ('RGBA', 'LA', 'P'):
-            # Create white background
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
-            img = background
-        elif img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        # Resize if image is too large (helps reduce file size)
-        width, height = img.size
-        if width > max_dimension or height > max_dimension:
-            if width > height:
-                new_width = max_dimension
-                new_height = int(height * (max_dimension / width))
-            else:
-                new_height = max_dimension
-                new_width = int(width * (max_dimension / height))
-            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        # Binary search for optimal quality to get under max_size_kb
-        max_size_bytes = max_size_kb * 1024
-        min_quality = 60
-        max_quality = 95
-        optimal_quality = 85
-        temp_path = output_path + '.tmp'
-        
-        # Binary search
-        while min_quality <= max_quality:
-            mid_quality = (min_quality + max_quality) // 2
-            img.save(temp_path, 'JPEG', quality=mid_quality, optimize=True)
-            file_size = os.path.getsize(temp_path)
-            
-            if file_size <= max_size_bytes:
-                optimal_quality = mid_quality
-                min_quality = mid_quality + 1
-            else:
-                max_quality = mid_quality - 1
-        
-        # Save final image with optimal quality
-        img.save(output_path, 'JPEG', quality=optimal_quality, optimize=True)
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        return True
-            
-    except Exception as e:
-        # If compression fails, return False (caller can handle)
-        print(f"Image compression error: {str(e)}")
-        if os.path.exists(output_path + '.tmp'):
-            try:
-                os.remove(output_path + '.tmp')
-            except:
-                pass
-        return False
+        print(f"Cloudinary delete error: {str(e)}")
 
 def is_admin_user():
     """Check if current logged-in user is an admin"""
@@ -1375,87 +1321,34 @@ def new_entity(category_id):
             if field["field_type"] == "image":
                 file = request.files.get(f"field_{field_id}")
                 if file and file.filename and allowed_file(file.filename):
-                    # Generate filename with .jpg extension
+                    # Generate a unique public_id for Cloudinary
                     base_name = os.path.splitext(secure_filename(file.filename))[0]
-                    filename = secure_filename(f"{entity_id}_{field_id}_{base_name}.jpg")
-                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    public_id = f"cspj/{entity_id}_{field_id}_{base_name}"
                     
-                    # Save uploaded file to temporary location
-                    temp_path = filepath + '.upload'
-                    file.save(temp_path)
-                    
-                    # Compress the image
-                    if compress_image(temp_path, filepath):
-                        # Generate thumbnails (100px for album, 300px for compare, 500px for category grid)
-                        base_name = os.path.splitext(filename)[0]
-                        thumbnail_100_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb100.jpg")
-                        thumbnail_300_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb300.jpg")
-                        thumbnail_500_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb500.jpg")
-                        generate_thumbnail(filepath, thumbnail_100_path, size=100)
-                        generate_thumbnail(filepath, thumbnail_300_path, size=300)
-                        generate_thumbnail(filepath, thumbnail_500_path, size=500)
-                        
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
-                        value = filename
-                    else:
-                        # If compression fails, use original (fallback)
-                        if os.path.exists(temp_path):
-                            os.rename(temp_path, filepath)
-                            base_name = os.path.splitext(filename)[0]
-                            thumbnail_100_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb100.jpg")
-                            thumbnail_300_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb300.jpg")
-                            thumbnail_500_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb500.jpg")
-                            generate_thumbnail(filepath, thumbnail_100_path, size=100)
-                            generate_thumbnail(filepath, thumbnail_300_path, size=300)
-                            generate_thumbnail(filepath, thumbnail_500_path, size=500)
-                        value = filename
+                    # Upload to Cloudinary
+                    secure_url, _ = upload_to_cloudinary(file, public_id=public_id)
+                    if secure_url:
+                        value = secure_url
             
             elif field["field_type"] == "image_album":
                 # Handle multiple image uploads
                 files = request.files.getlist(f"field_{field_id}")
-                image_filenames = []
+                image_urls = []
                 
                 for file in files:
                     if file and file.filename and allowed_file(file.filename):
-                        # Generate filename with .jpg extension
+                        # Generate a unique public_id for Cloudinary
                         base_name = os.path.splitext(secure_filename(file.filename))[0]
-                        filename = secure_filename(f"{entity_id}_{field_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{base_name}.jpg")
-                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+                        public_id = f"cspj/{entity_id}_{field_id}_{timestamp}_{base_name}"
                         
-                        # Save uploaded file to temporary location
-                        temp_path = filepath + '.upload'
-                        file.save(temp_path)
-                        
-                        # Compress the image
-                        if compress_image(temp_path, filepath):
-                            # Generate thumbnails (100px for album, 300px for compare, 500px for category grid)
-                            base_name = os.path.splitext(filename)[0]
-                            thumbnail_100_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb100.jpg")
-                            thumbnail_300_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb300.jpg")
-                            thumbnail_500_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb500.jpg")
-                            generate_thumbnail(filepath, thumbnail_100_path, size=100)
-                            generate_thumbnail(filepath, thumbnail_300_path, size=300)
-                            generate_thumbnail(filepath, thumbnail_500_path, size=500)
-                            
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
-                            image_filenames.append(filename)
-                        else:
-                            # If compression fails, use original (fallback)
-                            if os.path.exists(temp_path):
-                                os.rename(temp_path, filepath)
-                                base_name = os.path.splitext(filename)[0]
-                                thumbnail_100_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb100.jpg")
-                                thumbnail_300_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb300.jpg")
-                                thumbnail_500_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb500.jpg")
-                                generate_thumbnail(filepath, thumbnail_100_path, size=100)
-                                generate_thumbnail(filepath, thumbnail_300_path, size=300)
-                                generate_thumbnail(filepath, thumbnail_500_path, size=500)
-                            image_filenames.append(filename)
+                        # Upload to Cloudinary
+                        secure_url, _ = upload_to_cloudinary(file, public_id=public_id)
+                        if secure_url:
+                            image_urls.append(secure_url)
                 
-                if image_filenames:
-                    value = json.dumps(image_filenames)
+                if image_urls:
+                    value = json.dumps(image_urls)
                 else:
                     value = ""
             
@@ -1584,53 +1477,25 @@ def edit_entity(category_id, entity_id):
                 if clear_image:
                     old_value = field_values.get(field_id)
                     if old_value:
-                        delete_image_and_thumbnails(old_value)
+                        delete_from_cloudinary(old_value)
                     value = ""
                 else:
                     file = request.files.get(f"field_{field_id}")
                     if file and file.filename and allowed_file(file.filename):
-                        # Delete old file and thumbnails if exists
+                        # Delete old image from Cloudinary if exists
                         old_value = field_values.get(field_id)
                         if old_value:
-                            delete_image_and_thumbnails(old_value)
+                            delete_from_cloudinary(old_value)
                         
-                        # Generate filename with .jpg extension
+                        # Upload new image to Cloudinary
                         base_name = os.path.splitext(secure_filename(file.filename))[0]
-                        filename = secure_filename(f"{entity_id}_{field_id}_{base_name}.jpg")
-                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        public_id = f"cspj/{entity_id}_{field_id}_{base_name}"
                         
-                        # Save uploaded file to temporary location
-                        temp_path = filepath + '.upload'
-                        file.save(temp_path)
-                        
-                        # Compress the image
-                        if compress_image(temp_path, filepath):
-                            # Generate thumbnails (100px for album, 300px for compare, 500px for category grid)
-                            base_name = os.path.splitext(filename)[0]
-                            thumbnail_100_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb100.jpg")
-                            thumbnail_300_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb300.jpg")
-                            thumbnail_500_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb500.jpg")
-                            generate_thumbnail(filepath, thumbnail_100_path, size=100)
-                            generate_thumbnail(filepath, thumbnail_300_path, size=300)
-                            generate_thumbnail(filepath, thumbnail_500_path, size=500)
-                            
-                            # Remove temporary file
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
-                            value = filename
+                        secure_url, _ = upload_to_cloudinary(file, public_id=public_id)
+                        if secure_url:
+                            value = secure_url
                         else:
-                            # If compression fails, use original (fallback)
-                            if os.path.exists(temp_path):
-                                os.rename(temp_path, filepath)
-                                # Generate thumbnails even for fallback
-                                base_name = os.path.splitext(filename)[0]
-                                thumbnail_100_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb100.jpg")
-                                thumbnail_300_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb300.jpg")
-                                thumbnail_500_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb500.jpg")
-                                generate_thumbnail(filepath, thumbnail_100_path, size=100)
-                                generate_thumbnail(filepath, thumbnail_300_path, size=300)
-                                generate_thumbnail(filepath, thumbnail_500_path, size=500)
-                            value = filename
+                            value = field_values.get(field_id, "")
                     else:
                         value = field_values.get(field_id, "")
             
@@ -1647,50 +1512,21 @@ def edit_entity(category_id, entity_id):
                 for del_img in delete_images:
                     if del_img in existing_images:
                         existing_images.remove(del_img)
-                    # Delete file and thumbnails from filesystem
-                    delete_image_and_thumbnails(del_img)
+                    # Delete from Cloudinary
+                    delete_from_cloudinary(del_img)
                 
                 # Handle new image uploads
                 files = request.files.getlist(f"field_{field_id}")
                 for file in files:
                     if file and file.filename and allowed_file(file.filename):
-                        # Generate filename with .jpg extension
+                        # Upload to Cloudinary
                         base_name = os.path.splitext(secure_filename(file.filename))[0]
-                        filename = secure_filename(f"{entity_id}_{field_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{base_name}.jpg")
-                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+                        public_id = f"cspj/{entity_id}_{field_id}_{timestamp}_{base_name}"
                         
-                        # Save uploaded file to temporary location
-                        temp_path = filepath + '.upload'
-                        file.save(temp_path)
-                        
-                        # Compress the image
-                        if compress_image(temp_path, filepath):
-                            # Generate thumbnails (100px for album, 300px for compare, 500px for category grid)
-                            base_name = os.path.splitext(filename)[0]
-                            thumbnail_100_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb100.jpg")
-                            thumbnail_300_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb300.jpg")
-                            thumbnail_500_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb500.jpg")
-                            generate_thumbnail(filepath, thumbnail_100_path, size=100)
-                            generate_thumbnail(filepath, thumbnail_300_path, size=300)
-                            generate_thumbnail(filepath, thumbnail_500_path, size=500)
-                            
-                            # Remove temporary file
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
-                            existing_images.append(filename)
-                        else:
-                            # If compression fails, use original (fallback)
-                            if os.path.exists(temp_path):
-                                os.rename(temp_path, filepath)
-                                # Generate thumbnails even for fallback
-                                base_name = os.path.splitext(filename)[0]
-                                thumbnail_100_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb100.jpg")
-                                thumbnail_300_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb300.jpg")
-                                thumbnail_500_path = os.path.join(THUMBNAIL_FOLDER, f"{base_name}_thumb500.jpg")
-                                generate_thumbnail(filepath, thumbnail_100_path, size=100)
-                                generate_thumbnail(filepath, thumbnail_300_path, size=300)
-                                generate_thumbnail(filepath, thumbnail_500_path, size=500)
-                            existing_images.append(filename)
+                        secure_url, _ = upload_to_cloudinary(file, public_id=public_id)
+                        if secure_url:
+                            existing_images.append(secure_url)
                 
                 if existing_images:
                     value = json.dumps(existing_images)
@@ -1883,13 +1719,13 @@ def delete_category(category_id):
             if row["value"]:
                 if row["field_type"] == "image":
                     # Single image
-                    delete_image_and_thumbnails(row["value"])
+                    delete_from_cloudinary(row["value"])
                 elif row["field_type"] == "image_album":
                     # Multiple images stored as JSON
                     try:
                         image_list = json.loads(row["value"])
                         for img_filename in image_list:
-                            delete_image_and_thumbnails(img_filename)
+                            delete_from_cloudinary(img_filename)
                     except:
                         pass
     
@@ -1947,13 +1783,13 @@ def delete_entity(category_id, entity_id):
         if row["value"]:
             if row["field_type"] == "image":
                 # Single image
-                delete_image_and_thumbnails(row["value"])
+                delete_from_cloudinary(row["value"])
             elif row["field_type"] == "image_album":
                 # Multiple images stored as JSON
                 try:
                     image_list = json.loads(row["value"])
                     for img_filename in image_list:
-                        delete_image_and_thumbnails(img_filename)
+                        delete_from_cloudinary(img_filename)
                 except:
                     pass
     
@@ -3299,12 +3135,12 @@ def admin_delete_user(user_id):
         for row in field_values:
             if row["value"]:
                 if row["field_type"] == "image":
-                    delete_image_and_thumbnails(row["value"])
+                    delete_from_cloudinary(row["value"])
                 elif row["field_type"] == "image_album":
                     try:
                         image_list = json.loads(row["value"])
                         for img_filename in image_list:
-                            delete_image_and_thumbnails(img_filename)
+                            delete_from_cloudinary(img_filename)
                     except:
                         pass
     
@@ -4060,8 +3896,8 @@ def admin_backup_user_zip(user_id):
     
     db.close()
     
-    # Collect image filenames from field_values
-    image_filenames = set()
+    # Collect image URLs/filenames from field_values
+    image_values = set()
     for cat in backup_data["user"]["categories"]:
         for entity in cat.get("entities", []):
             for fv in entity.get("field_values", []):
@@ -4075,11 +3911,11 @@ def admin_backup_user_zip(user_id):
                         field_type = f.get("field_type")
                         break
                 if field_type == "image":
-                    image_filenames.add(val)
+                    image_values.add(val)
                 elif field_type == "image_album":
                     try:
                         for img in json.loads(val):
-                            image_filenames.add(img)
+                            image_values.add(img)
                     except (json.JSONDecodeError, TypeError):
                         pass
     
@@ -4089,17 +3925,36 @@ def admin_backup_user_zip(user_id):
         # Add JSON backup
         zf.writestr("backup.json", json.dumps(backup_data, indent=2, ensure_ascii=False))
         
-        # Add images
-        for filename in image_filenames:
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            if os.path.exists(filepath):
-                zf.write(filepath, f"images/{filename}")
-            # Also add thumbnail if exists
-            base_name = os.path.splitext(filename)[0]
-            thumb_filename = f"{base_name}_thumb100.jpg"
-            thumb_path = os.path.join(THUMBNAIL_FOLDER, thumb_filename)
-            if os.path.exists(thumb_path):
-                zf.write(thumb_path, f"images/thumbnails/{thumb_filename}")
+        # Add images - handle both Cloudinary URLs and local filenames
+        import urllib.request
+        for img_value in image_values:
+            if img_value.startswith("http"):
+                # Cloudinary URL - download and include in ZIP
+                try:
+                    # Use the public_id as the filename in the ZIP
+                    parts = img_value.split("/upload/")
+                    if len(parts) > 1:
+                        path = parts[1]
+                        if path.startswith("v") and "/" in path:
+                            path = path.split("/", 1)[1]
+                        zip_name = path
+                    else:
+                        zip_name = img_value.split("/")[-1]
+                    img_data = urllib.request.urlopen(img_value).read()
+                    zf.writestr(f"images/{zip_name}", img_data)
+                except Exception as e:
+                    print(f"Could not download image for backup: {str(e)}")
+            else:
+                # Local filename
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], img_value)
+                if os.path.exists(filepath):
+                    zf.write(filepath, f"images/{img_value}")
+                # Also add thumbnail if exists
+                base_name = os.path.splitext(img_value)[0]
+                thumb_filename = f"{base_name}_thumb100.jpg"
+                thumb_path = os.path.join(THUMBNAIL_FOLDER, thumb_filename)
+                if os.path.exists(thumb_path):
+                    zf.write(thumb_path, f"images/thumbnails/{thumb_filename}")
     
     zip_buffer.seek(0)
     response = make_response(zip_buffer.getvalue())
@@ -4167,26 +4022,27 @@ def admin_import_user(user_id):
                 user_data = backup_data.get("user", backup_data)
                 categories = user_data.get("categories", [])
                 
-                # Copy images to upload folder
+                # Upload images from ZIP to Cloudinary
                 for name in zf.namelist():
-                    if name.startswith('images/') and not name.endswith('/'):
-                        # Extract to temp, then copy to uploads
+                    if name.startswith('images/') and not name.endswith('/') and 'thumbnails/' not in name:
                         rel_path = name[len('images/'):]
-                        if 'thumbnails/' in rel_path:
-                            dest_dir = THUMBNAIL_FOLDER
-                            dest_name = rel_path.replace('thumbnails/', '')
-                        else:
-                            dest_dir = app.config['UPLOAD_FOLDER']
-                            dest_name = rel_path
-                        
-                        dest_path = os.path.join(dest_dir, dest_name)
-                        os.makedirs(os.path.dirname(dest_path) if os.path.dirname(dest_path) else dest_dir, exist_ok=True)
-                        with zf.open(name) as src:
-                            with open(dest_path, 'wb') as dst:
-                                shutil.copyfileobj(src, dst)
-                        # Map original filename (without thumbnails/) for field_values
-                        if 'thumbnails/' not in rel_path:
-                            image_map[dest_name] = dest_name  # same name, we copied it
+                        try:
+                            img_data = zf.read(name)
+                            public_id = f"cspj/import_{os.path.splitext(rel_path)[0]}"
+                            result = cloudinary.uploader.upload(
+                                img_data,
+                                public_id=public_id,
+                                overwrite=True,
+                                resource_type="image",
+                                transformation=[
+                                    {"width": 1920, "height": 1920, "crop": "limit"},
+                                    {"quality": "auto:good", "fetch_format": "auto"}
+                                ]
+                            )
+                            if result.get("secure_url"):
+                                image_map[rel_path] = result["secure_url"]
+                        except Exception as e:
+                            print(f"Error uploading imported image {rel_path}: {str(e)}")
         else:
             # Assume JSON file
             backup_data = json.loads(file.read().decode('utf-8'))
@@ -4288,12 +4144,30 @@ def admin_import_user(user_id):
                     new_entity_id = row["id"] if row else old_entity_id
                 entity_id_map[(old_cat_id, old_entity_id)] = new_entity_id
                 
-                # Import field values
+                # Import field values (remap image filenames to Cloudinary URLs if available)
                 for fv in ent.get("field_values", []):
                     old_field_id = fv.get("field_id")
                     value = fv.get("value") or ""
                     new_field_id = field_id_map.get((old_cat_id, old_field_id))
                     if new_field_id:
+                        # Remap image filenames to Cloudinary URLs from image_map
+                        if image_map and value:
+                            # Determine field type
+                            ftype = None
+                            for ff in cat.get("fields", []):
+                                if ff.get("id") == old_field_id:
+                                    ftype = ff.get("field_type")
+                                    break
+                            if ftype == "image" and value in image_map:
+                                value = image_map[value]
+                            elif ftype == "image_album":
+                                try:
+                                    imgs = json.loads(value)
+                                    remapped = [image_map.get(img, img) for img in imgs]
+                                    value = json.dumps(remapped)
+                                except (json.JSONDecodeError, TypeError):
+                                    pass
+                        
                         db.execute(
                             "INSERT INTO field_values (entity_id, field_id, value) VALUES (?, ?, ?)",
                             (new_entity_id, new_field_id, value)
