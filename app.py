@@ -46,10 +46,6 @@ try:
             secure=True
         )
     
-    cfg = cloudinary.config()
-    _secret = cfg.api_secret or ""
-    _preview = _secret[:4] + "..." + _secret[-4:] if len(_secret) > 8 else "MISSING/SHORT"
-    print(f"=== Cloudinary config: cloud={cfg.cloud_name}, key={cfg.api_key}, secret={_preview}, secret_len={len(_secret)} ===")
 except Exception as e:
     print(f"=== Cloudinary config ERROR: {e} ===")
 
@@ -1176,12 +1172,6 @@ def view_category(category_id):
         traceback.print_exc()
     
     db.close()
-    
-    # Debug: Print entity count
-    print(f"DEBUG: Category {category_id} has {len(entities_with_tags)} entities")
-    print(f"DEBUG: entities_with_tags type: {type(entities_with_tags)}")
-    if entities_with_tags:
-        print(f"DEBUG: First entity structure: {entities_with_tags[0]}")
     
     # Convert fields to dictionaries with integer IDs
     fields_list = []
