@@ -231,6 +231,7 @@ def get_db():
         return db
     
     # Use SQLite for local development only (no DATABASE_URL set)
+    print("WARNING: DATABASE_URL not set, using SQLite (data will NOT persist on Railway!)")
     db = sqlite3.connect('database.db', timeout=10.0)
     db.row_factory = sqlite3.Row
     # Enable WAL mode for better concurrency (allows multiple readers)
@@ -243,6 +244,11 @@ def get_db():
 
 def init_db():
     """Initialize database with schema"""
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url:
+        print(f"=== INIT_DB: Using PostgreSQL (DATABASE_URL is set) ===")
+    else:
+        print(f"=== INIT_DB: WARNING - Using SQLite! DATABASE_URL is NOT set! ===")
     db = get_db()
     
     # Users table
