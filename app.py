@@ -169,6 +169,28 @@ class PostgresConnection:
             query = query.replace('INTEGER PRIMARY KEY AUTOINCREMENT', 'SERIAL PRIMARY KEY')
             query = query.replace('AUTOINCREMENT', '')
         
+        # Convert SQLite INSERT OR REPLACE to PostgreSQL ON CONFLICT DO UPDATE
+        import re
+        upper_query = query.strip().upper()
+        if upper_query.startswith('INSERT OR REPLACE'):
+            query = re.sub(r'INSERT\s+OR\s+REPLACE\s+INTO', 'INSERT INTO', query, flags=re.IGNORECASE)
+            # Extract table and column info to build ON CONFLICT clause
+            # Pattern: INSERT INTO table (col1, col2, ...) VALUES (?, ?, ...)
+            match = re.search(r'INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)', query, re.IGNORECASE)
+            if match:
+                table_name = match.group(1)
+                columns = [c.strip() for c in match.group(2).split(',')]
+                # For field_values table, conflict on (entity_id, field_id)
+                if table_name == 'field_values':
+                    update_cols = [c for c in columns if c not in ('entity_id', 'field_id')]
+                    update_clause = ', '.join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+                    query = query.rstrip(';') + f' ON CONFLICT (entity_id, field_id) DO UPDATE SET {update_clause}'
+        
+        # Convert SQLite INSERT OR IGNORE to PostgreSQL ON CONFLICT DO NOTHING
+        if query.strip().upper().startswith('INSERT OR IGNORE'):
+            query = re.sub(r'INSERT\s+OR\s+IGNORE\s+INTO', 'INSERT INTO', query, flags=re.IGNORECASE)
+            query = query.rstrip(';') + ' ON CONFLICT DO NOTHING'
+        
         # Convert SQLite placeholders (?) to PostgreSQL placeholders (%s)
         # For INSERT queries, add RETURNING id to get the last inserted ID
         original_query = query
