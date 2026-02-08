@@ -3,7 +3,6 @@ import zipfile
 import shutil
 import tempfile
 from flask import Flask, render_template, request, redirect, session, flash, jsonify, url_for, make_response
-from flask_session import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 import sqlite3
@@ -17,10 +16,8 @@ from PIL import Image
 # Configure application
 app = Flask(__name__)
 
-# Configure session to use filesystem (instead of signed cookies)
-app.config["SESSION_PERMANENT"] = False
-app.config["SESSION_TYPE"] = "filesystem"
-Session(app)
+# Configure session to use signed cookies (persists across deploys)
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
 # Configure upload folder
 UPLOAD_FOLDER = 'static/uploads'
@@ -216,32 +213,24 @@ def get_db():
     
     if database_url:
         # Use PostgreSQL on Railway
-        try:
-            import psycopg2
-            from psycopg2.extras import RealDictCursor
-            
-            # Parse DATABASE_URL (Railway format: postgresql://user:pass@host:port/dbname)
-            # Convert to psycopg2 format if needed
-            if database_url.startswith('postgres://'):
-                database_url = database_url.replace('postgres://', 'postgresql://', 1)
-            
-            conn = psycopg2.connect(database_url, sslmode='require')
-            # Wrap in PostgresConnection to make it work like SQLite
-            db = PostgresConnection(conn)
-            # Create a custom row factory that returns PostgresRow objects
-            def row_factory(cursor, row):
-                return PostgresRow(dict(row))
-            db.row_factory = row_factory
-            return db
-        except ImportError:
-            # Fallback to SQLite if psycopg2 not available
-            pass
-        except Exception as e:
-            print(f"Error connecting to PostgreSQL: {e}")
-            # Fallback to SQLite
-            pass
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        
+        # Parse DATABASE_URL (Railway format: postgresql://user:pass@host:port/dbname)
+        # Convert to psycopg2 format if needed
+        if database_url.startswith('postgres://'):
+            database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        
+        conn = psycopg2.connect(database_url, sslmode='require')
+        # Wrap in PostgresConnection to make it work like SQLite
+        db = PostgresConnection(conn)
+        # Create a custom row factory that returns PostgresRow objects
+        def row_factory(cursor, row):
+            return PostgresRow(dict(row))
+        db.row_factory = row_factory
+        return db
     
-    # Use SQLite for local development
+    # Use SQLite for local development only (no DATABASE_URL set)
     db = sqlite3.connect('database.db', timeout=10.0)
     db.row_factory = sqlite3.Row
     # Enable WAL mode for better concurrency (allows multiple readers)
@@ -281,7 +270,7 @@ def init_db():
             if first_user:
                 db.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (first_user["id"],))
                 db.commit()
-    except sqlite3.OperationalError:
+    except Exception:
         pass  # Column already exists or table doesn't exist yet
     
     # Sections table
@@ -319,7 +308,7 @@ def init_db():
         if 'display_order' not in columns:
             db.execute("ALTER TABLE categories ADD COLUMN display_order INTEGER DEFAULT 0")
             db.commit()
-    except sqlite3.OperationalError:
+    except Exception:
         pass  # Column already exists or table doesn't exist yet
     
     # Fields table (custom fields for categories)
@@ -405,7 +394,7 @@ def init_db():
         # Create index
         db.execute("CREATE INDEX IF NOT EXISTS idx_tags_category ON tags(category_id)")
         db.commit()
-    except sqlite3.OperationalError as e:
+    except Exception:
         # Table might not exist yet or migration already done
         pass
     
@@ -416,7 +405,7 @@ def init_db():
         if 'display_order' not in columns:
             db.execute("ALTER TABLE entities ADD COLUMN display_order INTEGER DEFAULT 0")
             db.commit()
-    except sqlite3.OperationalError:
+    except Exception:
         pass
 
     # Entity tags junction table
@@ -488,7 +477,7 @@ def init_db():
         if 'show_comments' not in columns:
             db.execute("ALTER TABLE shared_posts ADD COLUMN show_comments INTEGER DEFAULT 1")
         db.commit()
-    except sqlite3.OperationalError:
+    except Exception:
         pass  # Columns already exist or table doesn't exist yet
     
     # Post likes table
@@ -765,7 +754,7 @@ def register():
                 (username, generate_password_hash(password))
             )
             db.commit()
-        except sqlite3.IntegrityError:
+        except Exception:
             flash("Username already exists")
             db.close()
             return render_template("register.html")
