@@ -3982,7 +3982,7 @@ def admin_backup_user_zip(user_id):
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         # Add JSON backup
-        zf.writestr("backup.json", json.dumps(backup_data, indent=2, ensure_ascii=False))
+        zf.writestr("backup.json", json.dumps(backup_data, indent=2, ensure_ascii=False, default=str))
         
         # Add images - handle both Cloudinary URLs and local filenames
         import urllib.request
