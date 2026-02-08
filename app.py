@@ -23,26 +23,35 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
 # Configure Cloudinary
-# Supports CLOUDINARY_URL (single variable, preferred) or individual variables
-cloudinary_url = os.environ.get("CLOUDINARY_URL")
-if cloudinary_url:
-    # CLOUDINARY_URL format: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
-    cloudinary.config(cloudinary_url=cloudinary_url, secure=True)
-else:
-    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
-    api_key = os.environ.get("CLOUDINARY_API_KEY", "").strip()
-    api_secret = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
-    cloudinary.config(
-        cloud_name=cloud_name,
-        api_key=api_key,
-        api_secret=api_secret,
-        secure=True
-    )
-
-# Debug: verify Cloudinary config at startup
-cfg = cloudinary.config()
-secret_preview = cfg.api_secret[:4] + "..." + cfg.api_secret[-4:] if cfg.api_secret and len(cfg.api_secret) > 8 else "MISSING/SHORT"
-print(f"=== Cloudinary config: cloud={cfg.cloud_name}, key={cfg.api_key}, secret={secret_preview}, secret_len={len(cfg.api_secret) if cfg.api_secret else 0} ===")
+# The SDK auto-detects the CLOUDINARY_URL environment variable if set.
+# Otherwise, it reads CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.
+try:
+    cloudinary_url = os.environ.get("CLOUDINARY_URL")
+    if cloudinary_url:
+        # Parse CLOUDINARY_URL manually: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+        # (more reliable than relying on SDK auto-detect across versions)
+        from urllib.parse import urlparse as _urlparse
+        _parsed = _urlparse(cloudinary_url)
+        cloudinary.config(
+            cloud_name=_parsed.hostname,
+            api_key=_parsed.username,
+            api_secret=_parsed.password,
+            secure=True
+        )
+    else:
+        cloudinary.config(
+            cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip(),
+            api_key=os.environ.get("CLOUDINARY_API_KEY", "").strip(),
+            api_secret=os.environ.get("CLOUDINARY_API_SECRET", "").strip(),
+            secure=True
+        )
+    
+    cfg = cloudinary.config()
+    _secret = cfg.api_secret or ""
+    _preview = _secret[:4] + "..." + _secret[-4:] if len(_secret) > 8 else "MISSING/SHORT"
+    print(f"=== Cloudinary config: cloud={cfg.cloud_name}, key={cfg.api_key}, secret={_preview}, secret_len={len(_secret)} ===")
+except Exception as e:
+    print(f"=== Cloudinary config ERROR: {e} ===")
 
 # Configure upload folder (kept as fallback for local development)
 UPLOAD_FOLDER = 'static/uploads'
