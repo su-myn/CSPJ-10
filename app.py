@@ -153,6 +153,7 @@ class PostgresCursor:
         results = self.cursor.fetchall()
         return [PostgresRow(dict(r)) for r in results]
     
+    @property
     def lastrowid(self):
         # For PostgreSQL, we need to get the ID from the RETURNING clause
         # If _lastrowid was set, return it
@@ -622,12 +623,17 @@ def upload_to_cloudinary(file_storage, public_id=None):
         # Compress image to max 400KB JPEG before uploading
         compressed_bytes = compress_image_to_bytes(file_storage)
         
+        # Wrap in BytesIO so Cloudinary receives a file-like object
+        file_obj = io.BytesIO(compressed_bytes)
+        
         result = cloudinary.uploader.upload(
-            compressed_bytes,
+            file_obj,
             folder="cspj",
             resource_type="image"
         )
-        return result.get("secure_url"), result.get("public_id")
+        secure_url = result.get("secure_url")
+        cloud_public_id = result.get("public_id")
+        return secure_url, cloud_public_id
     except Exception as e:
         print(f"Cloudinary upload error: {str(e)}")
         return None, None
