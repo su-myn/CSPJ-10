@@ -22,13 +22,26 @@ app = Flask(__name__)
 # Configure session to use signed cookies (persists across deploys)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
-# Configure Cloudinary (reads CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET from env)
-cloudinary.config(
-    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
-    api_key=os.environ.get("CLOUDINARY_API_KEY"),
-    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
-    secure=True
-)
+# Configure Cloudinary
+# Supports CLOUDINARY_URL (single variable, preferred) or individual variables
+cloudinary_url = os.environ.get("CLOUDINARY_URL")
+if cloudinary_url:
+    # CLOUDINARY_URL format: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+    cloudinary.config(cloudinary_url=cloudinary_url, secure=True)
+    print(f"=== Cloudinary configured via CLOUDINARY_URL (cloud: {cloudinary.config().cloud_name}) ===")
+else:
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+    api_key = os.environ.get("CLOUDINARY_API_KEY", "").strip()
+    api_secret = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
+    cloudinary.config(
+        cloud_name=cloud_name,
+        api_key=api_key,
+        api_secret=api_secret,
+        secure=True
+    )
+    # Debug: print partial credentials to verify they're loaded (hide most of secret)
+    secret_preview = api_secret[:4] + "..." + api_secret[-4:] if len(api_secret) > 8 else "TOO_SHORT"
+    print(f"=== Cloudinary configured: cloud={cloud_name}, key={api_key}, secret={secret_preview} ===")
 
 # Configure upload folder (kept as fallback for local development)
 UPLOAD_FOLDER = 'static/uploads'
