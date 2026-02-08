@@ -15,6 +15,10 @@ from PIL import Image
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (for local development)
+load_dotenv()
 
 # Configure application
 app = Flask(__name__)

@@ -29,6 +29,9 @@ static/uploads/*
 *.swo
 *~
 
+# Environment variables
+.env
+
 # OS
 .DS_Store
 Thumbs.db
