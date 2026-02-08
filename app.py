@@ -28,7 +28,6 @@ cloudinary_url = os.environ.get("CLOUDINARY_URL")
 if cloudinary_url:
     # CLOUDINARY_URL format: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
     cloudinary.config(cloudinary_url=cloudinary_url, secure=True)
-    print(f"=== Cloudinary configured via CLOUDINARY_URL (cloud: {cloudinary.config().cloud_name}) ===")
 else:
     cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
     api_key = os.environ.get("CLOUDINARY_API_KEY", "").strip()
@@ -39,9 +38,11 @@ else:
         api_secret=api_secret,
         secure=True
     )
-    # Debug: print partial credentials to verify they're loaded (hide most of secret)
-    secret_preview = api_secret[:4] + "..." + api_secret[-4:] if len(api_secret) > 8 else "TOO_SHORT"
-    print(f"=== Cloudinary configured: cloud={cloud_name}, key={api_key}, secret={secret_preview} ===")
+
+# Debug: verify Cloudinary config at startup
+cfg = cloudinary.config()
+secret_preview = cfg.api_secret[:4] + "..." + cfg.api_secret[-4:] if cfg.api_secret and len(cfg.api_secret) > 8 else "MISSING/SHORT"
+print(f"=== Cloudinary config: cloud={cfg.cloud_name}, key={cfg.api_key}, secret={secret_preview}, secret_len={len(cfg.api_secret) if cfg.api_secret else 0} ===")
 
 # Configure upload folder (kept as fallback for local development)
 UPLOAD_FOLDER = 'static/uploads'
@@ -554,14 +555,14 @@ def upload_to_cloudinary(file_storage, public_id=None):
         (secure_url, public_id) tuple on success, (None, None) on failure
     """
     try:
-        upload_options = {
-            "overwrite": True,
-            "resource_type": "image",
-        }
-        if public_id:
-            upload_options["public_id"] = public_id
+        # Read file into bytes so we can pass it cleanly
+        file_bytes = file_storage.read()
         
-        result = cloudinary.uploader.upload(file_storage, **upload_options)
+        result = cloudinary.uploader.upload(
+            file_bytes,
+            folder="cspj",
+            resource_type="image"
+        )
         return result.get("secure_url"), result.get("public_id")
     except Exception as e:
         print(f"Cloudinary upload error: {str(e)}")
@@ -1331,12 +1332,8 @@ def new_entity(category_id):
             if field["field_type"] == "image":
                 file = request.files.get(f"field_{field_id}")
                 if file and file.filename and allowed_file(file.filename):
-                    # Generate a unique public_id for Cloudinary
-                    base_name = os.path.splitext(secure_filename(file.filename))[0]
-                    public_id = f"cspj/{entity_id}_{field_id}_{base_name}"
-                    
                     # Upload to Cloudinary
-                    secure_url, _ = upload_to_cloudinary(file, public_id=public_id)
+                    secure_url, _ = upload_to_cloudinary(file)
                     if secure_url:
                         value = secure_url
             
@@ -1347,13 +1344,8 @@ def new_entity(category_id):
                 
                 for file in files:
                     if file and file.filename and allowed_file(file.filename):
-                        # Generate a unique public_id for Cloudinary
-                        base_name = os.path.splitext(secure_filename(file.filename))[0]
-                        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-                        public_id = f"cspj/{entity_id}_{field_id}_{timestamp}_{base_name}"
-                        
                         # Upload to Cloudinary
-                        secure_url, _ = upload_to_cloudinary(file, public_id=public_id)
+                        secure_url, _ = upload_to_cloudinary(file)
                         if secure_url:
                             image_urls.append(secure_url)
                 
@@ -1498,10 +1490,7 @@ def edit_entity(category_id, entity_id):
                             delete_from_cloudinary(old_value)
                         
                         # Upload new image to Cloudinary
-                        base_name = os.path.splitext(secure_filename(file.filename))[0]
-                        public_id = f"cspj/{entity_id}_{field_id}_{base_name}"
-                        
-                        secure_url, _ = upload_to_cloudinary(file, public_id=public_id)
+                        secure_url, _ = upload_to_cloudinary(file)
                         if secure_url:
                             value = secure_url
                         else:
@@ -1530,11 +1519,7 @@ def edit_entity(category_id, entity_id):
                 for file in files:
                     if file and file.filename and allowed_file(file.filename):
                         # Upload to Cloudinary
-                        base_name = os.path.splitext(secure_filename(file.filename))[0]
-                        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-                        public_id = f"cspj/{entity_id}_{field_id}_{timestamp}_{base_name}"
-                        
-                        secure_url, _ = upload_to_cloudinary(file, public_id=public_id)
+                        secure_url, _ = upload_to_cloudinary(file)
                         if secure_url:
                             existing_images.append(secure_url)
                 
