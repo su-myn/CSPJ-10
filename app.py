@@ -263,13 +263,13 @@ def init_db():
     
     # Add is_admin column to existing users table if it doesn't exist (migration)
     try:
-        cursor = db.execute("PRAGMA table_info(users)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'is_admin' not in columns:
-            db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
-            db.commit()
-        
-        # Make the first user an admin if no admins exist (run this check every time)
+        db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+        db.commit()
+    except Exception:
+        pass  # Column already exists
+    
+    # Make the first user an admin if no admins exist (run this check every time)
+    try:
         admin_count = db.execute("SELECT COUNT(*) FROM users WHERE is_admin = 1").fetchone()[0]
         if admin_count == 0:
             first_user = db.execute("SELECT id FROM users ORDER BY id LIMIT 1").fetchone()
@@ -277,7 +277,7 @@ def init_db():
                 db.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (first_user["id"],))
                 db.commit()
     except Exception:
-        pass  # Column already exists or table doesn't exist yet
+        pass
     
     # Sections table
     db.execute("""
@@ -298,24 +298,24 @@ def init_db():
             user_id INTEGER NOT NULL,
             section_id INTEGER,
             name TEXT NOT NULL,
+            display_order INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE SET NULL
         )
     """)
     
-    # Add section_id column to existing categories table if it doesn't exist (migration)
+    # Add missing columns to categories table (migration for both SQLite and PostgreSQL)
     try:
-        cursor = db.execute("PRAGMA table_info(categories)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'section_id' not in columns:
-            db.execute("ALTER TABLE categories ADD COLUMN section_id INTEGER")
-            db.commit()
-        if 'display_order' not in columns:
-            db.execute("ALTER TABLE categories ADD COLUMN display_order INTEGER DEFAULT 0")
-            db.commit()
+        db.execute("ALTER TABLE categories ADD COLUMN section_id INTEGER")
+        db.commit()
     except Exception:
-        pass  # Column already exists or table doesn't exist yet
+        pass  # Column already exists
+    try:
+        db.execute("ALTER TABLE categories ADD COLUMN display_order INTEGER DEFAULT 0")
+        db.commit()
+    except Exception:
+        pass  # Column already exists
     
     # Fields table (custom fields for categories)
     db.execute("""
@@ -337,6 +337,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             category_id INTEGER NOT NULL,
             name TEXT NOT NULL,
+            display_order INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
@@ -354,65 +355,19 @@ def init_db():
         )
     """)
     
-    # Migrate tags table to remove user_id and use category_id only
+    # Create index for tags
     try:
-        # Check if user_id column exists (old schema)
-        cursor = db.execute("PRAGMA table_info(tags)")
-        columns = [row[1] for row in cursor.fetchall()]
-        
-        if 'user_id' in columns:
-            # Old schema exists - need to recreate table without user_id
-            # First, ensure category_id exists
-            if 'category_id' not in columns:
-                db.execute("ALTER TABLE tags ADD COLUMN category_id INTEGER")
-                db.execute("UPDATE tags SET category_id = (SELECT id FROM categories WHERE user_id = tags.user_id LIMIT 1) WHERE category_id IS NULL")
-            
-            # Create new table with correct schema (no user_id)
-            db.execute("""
-                CREATE TABLE tags_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    category_id INTEGER NOT NULL,
-                    name TEXT NOT NULL,
-                    color TEXT DEFAULT '#007bff',
-                    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-                )
-            """)
-            
-            # Copy data from old table to new table
-            db.execute("""
-                INSERT INTO tags_new (id, category_id, name, color)
-                SELECT id, category_id, name, COALESCE(color, '#007bff')
-                FROM tags
-                WHERE category_id IS NOT NULL
-            """)
-            
-            # Drop old table
-            db.execute("DROP TABLE tags")
-            # Rename new table
-            db.execute("ALTER TABLE tags_new RENAME TO tags")
-            db.commit()
-        elif 'category_id' not in columns:
-            # Add category_id if it doesn't exist
-            db.execute("ALTER TABLE tags ADD COLUMN category_id INTEGER")
-            db.execute("UPDATE tags SET category_id = (SELECT id FROM categories WHERE user_id = tags.user_id LIMIT 1) WHERE category_id IS NULL")
-            db.commit()
-        
-        # Create index
         db.execute("CREATE INDEX IF NOT EXISTS idx_tags_category ON tags(category_id)")
         db.commit()
     except Exception:
-        # Table might not exist yet or migration already done
         pass
     
     # Add display_order to entities if it doesn't exist (migration)
     try:
-        cursor = db.execute("PRAGMA table_info(entities)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'display_order' not in columns:
-            db.execute("ALTER TABLE entities ADD COLUMN display_order INTEGER DEFAULT 0")
-            db.commit()
+        db.execute("ALTER TABLE entities ADD COLUMN display_order INTEGER DEFAULT 0")
+        db.commit()
     except Exception:
-        pass
+        pass  # Column already exists
 
     # Entity tags junction table
     db.execute("""
@@ -474,17 +429,20 @@ def init_db():
     
     # Add visibility columns if they don't exist (migration)
     try:
-        cursor = db.execute("PRAGMA table_info(shared_posts)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'show_like_count' not in columns:
-            db.execute("ALTER TABLE shared_posts ADD COLUMN show_like_count INTEGER DEFAULT 1")
-        if 'show_like_persons' not in columns:
-            db.execute("ALTER TABLE shared_posts ADD COLUMN show_like_persons INTEGER DEFAULT 1")
-        if 'show_comments' not in columns:
-            db.execute("ALTER TABLE shared_posts ADD COLUMN show_comments INTEGER DEFAULT 1")
+        db.execute("ALTER TABLE shared_posts ADD COLUMN show_like_count INTEGER DEFAULT 1")
         db.commit()
     except Exception:
-        pass  # Columns already exist or table doesn't exist yet
+        pass  # Column already exists
+    try:
+        db.execute("ALTER TABLE shared_posts ADD COLUMN show_like_persons INTEGER DEFAULT 1")
+        db.commit()
+    except Exception:
+        pass  # Column already exists
+    try:
+        db.execute("ALTER TABLE shared_posts ADD COLUMN show_comments INTEGER DEFAULT 1")
+        db.commit()
+    except Exception:
+        pass  # Column already exists
     
     # Post likes table
     db.execute("""
