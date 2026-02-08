@@ -194,6 +194,9 @@ class PostgresConnection:
     def commit(self):
         self.conn.commit()
     
+    def rollback(self):
+        self.conn.rollback()
+    
     def close(self):
         self.conn.close()
     
@@ -242,6 +245,18 @@ def get_db():
         pass  # Ignore if WAL mode can't be set
     return db
 
+def safe_migrate(db, sql):
+    """Safely run a migration SQL statement (e.g. ALTER TABLE ADD COLUMN).
+    If it fails (e.g. column already exists), rollback and continue."""
+    try:
+        db.execute(sql)
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
 def init_db():
     """Initialize database with schema"""
     database_url = os.environ.get('DATABASE_URL')
@@ -262,11 +277,7 @@ def init_db():
     """)
     
     # Add is_admin column to existing users table if it doesn't exist (migration)
-    try:
-        db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
-        db.commit()
-    except Exception:
-        pass  # Column already exists
+    safe_migrate(db, "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
     
     # Make the first user an admin if no admins exist (run this check every time)
     try:
@@ -277,7 +288,10 @@ def init_db():
                 db.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (first_user["id"],))
                 db.commit()
     except Exception:
-        pass
+        try:
+            db.rollback()
+        except Exception:
+            pass
     
     # Sections table
     db.execute("""
@@ -306,16 +320,8 @@ def init_db():
     """)
     
     # Add missing columns to categories table (migration for both SQLite and PostgreSQL)
-    try:
-        db.execute("ALTER TABLE categories ADD COLUMN section_id INTEGER")
-        db.commit()
-    except Exception:
-        pass  # Column already exists
-    try:
-        db.execute("ALTER TABLE categories ADD COLUMN display_order INTEGER DEFAULT 0")
-        db.commit()
-    except Exception:
-        pass  # Column already exists
+    safe_migrate(db, "ALTER TABLE categories ADD COLUMN section_id INTEGER")
+    safe_migrate(db, "ALTER TABLE categories ADD COLUMN display_order INTEGER DEFAULT 0")
     
     # Fields table (custom fields for categories)
     db.execute("""
@@ -356,18 +362,10 @@ def init_db():
     """)
     
     # Create index for tags
-    try:
-        db.execute("CREATE INDEX IF NOT EXISTS idx_tags_category ON tags(category_id)")
-        db.commit()
-    except Exception:
-        pass
+    safe_migrate(db, "CREATE INDEX IF NOT EXISTS idx_tags_category ON tags(category_id)")
     
     # Add display_order to entities if it doesn't exist (migration)
-    try:
-        db.execute("ALTER TABLE entities ADD COLUMN display_order INTEGER DEFAULT 0")
-        db.commit()
-    except Exception:
-        pass  # Column already exists
+    safe_migrate(db, "ALTER TABLE entities ADD COLUMN display_order INTEGER DEFAULT 0")
 
     # Entity tags junction table
     db.execute("""
@@ -428,21 +426,9 @@ def init_db():
     """)
     
     # Add visibility columns if they don't exist (migration)
-    try:
-        db.execute("ALTER TABLE shared_posts ADD COLUMN show_like_count INTEGER DEFAULT 1")
-        db.commit()
-    except Exception:
-        pass  # Column already exists
-    try:
-        db.execute("ALTER TABLE shared_posts ADD COLUMN show_like_persons INTEGER DEFAULT 1")
-        db.commit()
-    except Exception:
-        pass  # Column already exists
-    try:
-        db.execute("ALTER TABLE shared_posts ADD COLUMN show_comments INTEGER DEFAULT 1")
-        db.commit()
-    except Exception:
-        pass  # Column already exists
+    safe_migrate(db, "ALTER TABLE shared_posts ADD COLUMN show_like_count INTEGER DEFAULT 1")
+    safe_migrate(db, "ALTER TABLE shared_posts ADD COLUMN show_like_persons INTEGER DEFAULT 1")
+    safe_migrate(db, "ALTER TABLE shared_posts ADD COLUMN show_comments INTEGER DEFAULT 1")
     
     # Post likes table
     db.execute("""
@@ -724,6 +710,10 @@ def register():
             )
             db.commit()
         except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
             flash("Username already exists")
             db.close()
             return render_template("register.html")
