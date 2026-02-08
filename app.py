@@ -612,12 +612,13 @@ def compress_image_to_bytes(file_storage, max_size_kb=400, max_dimension=1920):
     output.seek(0)
     return output.read()
 
-def upload_to_cloudinary(file_storage, public_id=None):
+def upload_to_cloudinary(file_storage, folder="cspj", public_id=None):
     """
     Compress image to max 400KB JPEG, then upload to Cloudinary.
     
     Args:
         file_storage: Flask FileStorage object (from request.files)
+        folder: Cloudinary folder path (e.g. "cspj/users/1/entities/5/album")
         public_id: Optional public_id for the image in Cloudinary
     
     Returns:
@@ -632,7 +633,7 @@ def upload_to_cloudinary(file_storage, public_id=None):
         
         result = cloudinary.uploader.upload(
             file_obj,
-            folder="cspj",
+            folder=folder,
             resource_type="image"
         )
         secure_url = result.get("secure_url")
@@ -1400,8 +1401,9 @@ def new_entity(category_id):
             if field["field_type"] == "image":
                 file = request.files.get(f"field_{field_id}")
                 if file and file.filename and allowed_file(file.filename):
-                    # Upload to Cloudinary
-                    secure_url, _ = upload_to_cloudinary(file)
+                    # Upload to Cloudinary (organized by user/entity)
+                    upload_folder = f"cspj/users/{session['user_id']}/entities/{entity_id}"
+                    secure_url, _ = upload_to_cloudinary(file, folder=upload_folder)
                     if secure_url:
                         value = secure_url
             
@@ -1412,8 +1414,9 @@ def new_entity(category_id):
                 
                 for file in files:
                     if file and file.filename and allowed_file(file.filename):
-                        # Upload to Cloudinary
-                        secure_url, _ = upload_to_cloudinary(file)
+                        # Upload to Cloudinary (album subfolder)
+                        upload_folder = f"cspj/users/{session['user_id']}/entities/{entity_id}/album"
+                        secure_url, _ = upload_to_cloudinary(file, folder=upload_folder)
                         if secure_url:
                             image_urls.append(secure_url)
                 
@@ -1557,8 +1560,9 @@ def edit_entity(category_id, entity_id):
                         if old_value:
                             delete_from_cloudinary(old_value)
                         
-                        # Upload new image to Cloudinary
-                        secure_url, _ = upload_to_cloudinary(file)
+                        # Upload new image to Cloudinary (organized by user/entity)
+                        upload_folder = f"cspj/users/{session['user_id']}/entities/{entity_id}"
+                        secure_url, _ = upload_to_cloudinary(file, folder=upload_folder)
                         if secure_url:
                             value = secure_url
                         else:
@@ -1586,8 +1590,9 @@ def edit_entity(category_id, entity_id):
                 files = request.files.getlist(f"field_{field_id}")
                 for file in files:
                     if file and file.filename and allowed_file(file.filename):
-                        # Upload to Cloudinary
-                        secure_url, _ = upload_to_cloudinary(file)
+                        # Upload to Cloudinary (album subfolder)
+                        upload_folder = f"cspj/users/{session['user_id']}/entities/{entity_id}/album"
+                        secure_url, _ = upload_to_cloudinary(file, folder=upload_folder)
                         if secure_url:
                             existing_images.append(secure_url)
                 
